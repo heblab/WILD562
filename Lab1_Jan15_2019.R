@@ -433,7 +433,7 @@ writeRaster(deer_w, "new_deer.tiff", "GTiff", overwrite=TRUE)
 
 ## The existing CRAN version of ggmap is 2.6.1. This version does unfortunately not yet enable using the Google API. The current version on GitHub is further advanced and fixes the issue. To install the GitHub version, you need to use the devtools package.
 
-
+devtools::install_github("dkahle/ggmap", ref = "tidyup")
 require(ggmap)
 citation('ggmap')
 
