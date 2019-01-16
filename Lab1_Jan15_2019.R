@@ -442,7 +442,7 @@ citation('ggmap')
 
 #Before we can start geocoding again, we need to obtain an API key from Google. Go to the registration page, and follow the instructions (select all mapping options). The geocoding API is a free service, but you nevertheless need to associate a credit card with the account.
 
-register_google(key = "AIzaSyCiIf7e_Lh21GRZBUlHJjM0kPb0c7qPmJs")
+register_google(key = "INSERT KEY HERE")
 has_goog_key()
 
 
