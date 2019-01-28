@@ -1,0 +1,504 @@
+---
+title: "WILD 562 Lab 3"
+author: "Mark Hebblewhite"
+date: "January 29 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, root.dir = '/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab3')
+```
+
+# 1. Introduction to the logistic regression model for Used-Available Data
+General introduction to the biological rationale of this lab was given in the Lab 2 introduction. In Lab 3, we extend the analysis of habitat use by wolves in two wolf packs from 2001-2005 in Banff National Park to analysis of habitat selection using univariate logistic model to estimate a resource selection function (RSF) as a function of the availability of resources. 
+
+Boyce and McDonald (1999) and Manly et al. (2002) defined a resource selection function (RSF) as any function that is proportional to the probability of use of a resource unit to covariates that allow biologists to gain insight into the underlying factors affecting the probability of use. Thus, H.S.I. models, expert opinion models, models based solely on use, occupancy models, and selection models are all potentially classified as RSF models is their function relates to the probability of use. The basic form of a resource selection function model is to relate the covariates that predict used locations against covariates that predict un-used or available locations. As we shall see in future weeks, there is a CRITICAL distinction in interpretation of the RSF dependent on which design is employed; the use-availability or the used-unused. For now, however, we will simply consider the best way to compare used locations against available locations.
+
+We will use logistic regression, a type of generalized linear model and member of the family of binomial models using the logit link function that relate the linear predictor vector of covariates to the probability function via the logistic function. This is a very useful model where we have binomial categorical outcomes such as used (which is set to =1) or available/un-used (which is set to =0). The basic equation is:
+
+$$logit(y) = \frac{exp^(\beta_0+\beta_1*X_1+\beta_n*X_n) + e}{1 + exp(\beta_0+\beta_1*X_11+\beta_n*X_n) + e}$$
+
+where y is the probability of a 1 (in true logistic regression), $\beta_0$ is the baseline probability, or intercept, $\beta_1$ and $\beta_n$ are the coefficients of covariates $X_1....X_n$, respectively. In this way, the exponentiated portion of the numerator and denominator are the familiar form of ANY linear model 
+
+$$ y = \beta_0+\beta_1*X_1+\beta_n*X_n + e $$
+Except here, y, is linear in the logit scale which ranges from - infinity to + infinity, which is problematic of course because the response, 0 or 1, cannot range between positive and negative infinity. This is the purpose of the logit link function presented here:
+
+$$logit(y) = \frac{exp()}{1 + exp()}$$
+
+which takes a linear term in the brackets and constrains it to be between 0 and 1. Mathematically, the function of this is to mathematically bound the response variable, Y, here Logit(P) between 0 and 1. If we exponentiate a small number, and then divide it by 1+ a small number, we get a number close to 0. Conversely, if the numerator evaluates as a large number, then 1+ a large number approaches 1.  The [exp/(1+exp)] link function simply bounds the response to be a continuous function between 0 and 1. 
+
+We will explore the logistic model below with simulated and empirical data building on our wolf habitat use and selection case study after getting started. 
+
+**SIDEBAR**
+*In this first, gentle, introduction to Resource Selection Functions (RSF) we are glossing over a few VERY important points about RSF models and the distinction between relative probabilities in used-availability designs (RSF) and the true probability obtained in Resource Selection Probability Functions (RSPF). *
+
+ 
+## 0.1 Preliminaries: getting started, loading packages, setting working directory
+
+```{r}
+#function to install and load required packages
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+#load or install these packages:
+packages <- c("ggplot2","foreign", "lattice", "psych", "effects", "plyr")
+
+#run function to install packages
+ipak(packages)
+setwd("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab3")
+```
+
+## 0.2 Preliminaries: Merging the wolf availabiltiy sample from the KDE's from last week. 
+Note last week we merged the wolf USED data, but not the availability data. Here is the code to merge the availabiltiy data. Note I did this for you, skip to 1.0 below. 
+```{r}
+#rdavail <- as.data.frame(cov.availRD)
+#str(rdavail)
+#rdavail$pack <- c("Red Deer")
+#str(rdused)
+
+## repeat for Bow Valley pack
+#bvavail <- as.data.frame(cov.availBV)
+#str(bvavail)
+#bvavail$pack <- c("Bow Valley")
+#str(bvavail)
+
+## merge the two availability samples together
+#wolfavail <- rbind(rdavail, bvavail)
+#str(wolfavail)
+
+## and for next week, lets add a new column for a 1=used 0 = avail
+#wolfavail$used <- 0
+
+#write.table(wolfavail, file = "/Users/mark.hebblewhite/Dropbox/WILD 562/Spring2017/lab2/new/wolfavail.csv", row.names=FALSE, na="", col.names=TRUE, sep=",")
+
+```
+
+## Objective 1.0 Merging wolf USED and wolf AVAIL datasets
+First read them back into active memory. 
+```{r}
+wolfused <-read.csv("wolfused.csv", header = TRUE)
+wolfavail <-read.csv("wolfavail.csv", header = TRUE)
+str(wolfavail)
+
+wolfkde <- rbind(wolfused, wolfavail)
+str(wolfkde)
+table(wolfkde$used, wolfkde$pack)
+table(wolfkde$used, wolfkde$deer_w2)
+
+## next we will create a new variable called usedFactor and graphically compare USED and AVAIL locations for prey
+wolfkde$usedFactor <- factor(wolfkde$used, labels=c('0','1'))
+str(wolfkde)
+```
+
+### Objective 1.1. Graphical data exploration for all wolves
+
+We will use the base boxplot graphing function in the R base package to explore differences between the usedFactor (1, 0) binary response variable for allt he different covariates of habitat suitability index variables. 
+```{r}
+par(mfrow = c(2,3))
+boxplot(deer_w2~usedFactor, data=wolfkde, main = "Deer Used-Avail", xlab="usedFactor", ylab="deer")
+boxplot(elk_w2~usedFactor, main = "Elk Used-Avail", ylab="elk_w2", xlab="usedFactor", data=wolfkde)
+boxplot(moose_w2~usedFactor, main = "Moose Used-Avail", ylab="moose_w2", xlab="usedFactor", data=wolfkde)
+boxplot(goat_w2~usedFactor, main = "Goat Used-Avail", ylab="goat_w2", xlab="usedFactor", data=wolfkde)
+boxplot(sheep_w2~usedFactor, main = "Sheep Used-Avail", ylab="sheep_w2", xlab="usedFactor", data=wolfkde)
+```
+Class discussion: how do we interpret the comparison of used and available for ungulate prey for wolves in Banff?
+
+Now lets do for Elevation and Distance from Human Access2
+```{r}
+par(mfrow = c(1,2))
+boxplot(Elevation2~usedFactor, data=wolfkde, main = "Elevation Used-Avail", xlab="usedFactor", ylab="deer")
+boxplot(DistFromHumanAccess2~usedFactor, data=wolfkde, main = "Human Access Used-Avail", ylab="elk_w2", xlab="usedFactor")
+```
+Class discussion: similarly, what do we think? Do wolves like humans? Do wolves like elevation?
+
+Note that the above analyses are for both packs combined, but your analyses last week confirmed that the red deer wolf pack, for example, dwells at higher elevations than the bow valley pack. We should probably consider the wolf packs separately. 
+
+```{r}
+## subset for Bow Valley Pack
+bvkde<- subset(wolfkde, subset=pack =="Bow Valley")
+par(mfrow = c(2,3))
+boxplot(deer_w2~usedFactor, data=bvkde, main = "Deer Used-Avail", xlab="usedFactor", ylab="deer")
+boxplot(elk_w2~usedFactor, data=bvkde, main = "Elk Used-Avail", ylab="elk_w2", xlab="usedFactor")
+boxplot(moose_w2~usedFactor, data=bvkde, main = "Moose Used-Avail", ylab="moose_w2", xlab="usedFactor")
+boxplot(goat_w2~usedFactor, data=bvkde, main = "Goat Used-Avail", ylab="goat_w2", xlab="usedFactor")
+boxplot(sheep_w2~usedFactor, data=bvkde, main = "Sheep Used-Avail", ylab="sheep_w2", xlab="usedFactor")
+## Now lets do for Elevation and Distance from Human Access2
+par(mfrow = c(1,2))
+boxplot(Elevation2~usedFactor, data=bvkde, main = "Elevation Used-Avail", xlab="usedFactor", ylab="deer")
+boxplot(DistFromHumanAccess2~usedFactor, data=bvkde, main = "Human Access Used-Avail", ylab="elk_w2", xlab="usedFactor")
+
+```
+
+Class discussion: how does the Bow Valley pack compare to all wolves in BNP?
+
+```{r}
+## subset for Red Deer Wolf
+rdkde <- subset(wolfkde, subset=pack=="Red Deer")
+table(rdkde$used, rdkde$pack)
+par(mfrow = c(2,3))
+boxplot(deer_w2~usedFactor, data=rdkde, main = "Deer Used-Avail", xlab="usedFactor", ylab="deer")
+boxplot(elk_w2~usedFactor, data=rdkde, main = "Elk Used-Avail", ylab="elk_w2", xlab="usedFactor")
+boxplot(moose_w2~usedFactor, data=rdkde, main = "Moose Used-Avail", ylab="moose_w2", xlab="usedFactor")
+boxplot(goat_w2~usedFactor, data=rdkde, main = "Goat Used-Avail", ylab="goat_w2", xlab="usedFactor")
+boxplot(sheep_w2~usedFactor, data=rdkde, main = "Sheep Used-Avail", ylab="sheep_w2", xlab="usedFactor")
+## Now lets do for Elevation and Distance from Human Access2
+par(mfrow = c(1,2))
+boxplot(Elevation2~usedFactor, data=rdkde, main = "Elevation Used-Avail", xlab="usedFactor", ylab="deer")
+boxplot(DistFromHumanAccess2~usedFactor, data=rdkde, main = "Human Access Used-Avail", ylab="elk_w2", xlab="usedFactor")
+
+```
+Class discussion: and what about the red deer pack?
+
+It would be nice if there was a way to graph both by pack and used?
+```{r}
+## Can make more complex box plots
+par(mfrow = c(1,1))
+boxplot(Elevation2~used+pack, data = wolfkde, main = "Bow Valley vs. Red Deer Elevation Used-Avail")
+boxplot(DistFromHumanAccess2~used+pack, data = wolfkde, main = "Bow Valley vs. Red Deer Human Access Used-Avail")
+boxplot(deer_w2~used+pack, data = wolfkde, main = "Bow Valley vs. Red Deer Elevation Used-Avail")
+boxplot(moose_w2~used+pack, data = wolfkde, main = "Bow Valley vs. Red Deer Elevation Used-Avail")
+boxplot(elk_w2~used+pack, data = wolfkde, main = "Bow Valley vs. Red Deer Elevation Used-Avail")
+boxplot(goat_w2~used+pack, data = wolfkde, main = "Bow Valley vs. Red Deer Elevation Used-Avail")
+boxplot(sheep_w2~used+pack, data = wolfkde, main = "Bow Valley vs. Red Deer Elevation Used-Avail")
+
+## using lattice package
+bwplot(sheep_w2+ goat_w2 + elk_w2+moose_w2+ deer_w2~as.factor(usedFactor)|pack, data = wolfkde, layout = c(2,5), pch = "|", outer = TRUE)
+
+```
+
+## Objective 1.2 - Numerical Summary Statistics
+```{r}
+## numerical summary statistics
+aggregate(wolfkde[1:8], by=list(wolfkde$pack, wolfkde$used), FUN=mean, na.rm=TRUE)
+
+# psych package
+describeBy(wolfkde, wolfkde$pack)
+tapply(wolfkde$pack, wolfkde$used, summary)
+```
+
+### Introduction to the plyr package
+http://stat545.com/block013_plyr-ddply.html
+and
+http://www.cookbook-r.com/Manipulating_data/Summarizing_data/
+and Hadley Wickhams original paper here: plyr paper: The split-apply-combine strategy for data analysis, Hadley Wickham, Journal of Statistical Software, vol. 40, no. 1, pp. 1–29, 2011.   
+```{r ddply,}
+ddply(wolfkde, c("pack", "used"), summarize, mean=mean(elk_w2, na.rm=TRUE), sd=sd(elk_w2, na.rm=TRUE))
+ddply(wolfkde, c("pack", "used"), summarize, mean=mean(deer_w2, na.rm=TRUE), sd=sd(deer_w2, na.rm=TRUE))
+ddply(wolfkde, c("pack", "used"), summarize, mean=mean(goat_w2, na.rm=TRUE), sd=sd(goat_w2, na.rm=TRUE))
+ddply(wolfkde, c("pack", "used"), summarize, mean=mean(moose_w2, na.rm=TRUE), sd=sd(moose_w2, na.rm=TRUE))
+ddply(wolfkde, c("pack", "used"), summarize, mean=mean(sheep_w2, na.rm=TRUE), sd=sd(sheep_w2, na.rm=TRUE))
+ddply(wolfkde, c("pack", "used"), summarize, mean=mean(Elevation2, na.rm=TRUE), sd=sd(Elevation2, na.rm=TRUE))
+ddply(wolfkde, c("pack", "used"), summarize, mean=mean(DistFromHumanAccess2, na.rm=TRUE), sd=sd(DistFromHumanAccess2, na.rm=TRUE))
+```
+Challenging Question : how could we do this all in one step in ddply??
+Getting to become an expert at ddply is a HUGE advantage. 
+
+## Graphical exploration with ggplot2
+Lets bring in the shapefile from last week wolfyht.csv just as a dataframe (i.e., the .dbf version of the shapefile, which I've already converted to .csv [note you can import .dbf's directly with the foreign package])
+The goal here is just to continue to build our data exploration skills
+```{r}
+wolfyht <-read.csv("wolfyht.csv", header = TRUE)
+str(wolfyht)
+# download the ggplot2 pdf manual and make sure you have the R Graphics Cookbook open too
+# chapter 6 in R Graphics cookbook
+# Data exploration
+ggplot(wolfyht, aes(x=EASTING, y = NORTHING)) + geom_point() + stat_density2d() + facet_grid(Pack ~ ., scales="free")
+# lets subset the data
+ggplot(wolfyht, aes(x=EASTING, y = NORTHING)) + geom_point() + stat_density2d(aes(alpha=..density..), geom="tile", contour=FALSE) + facet_grid(Pack ~ .)
+ggplot(wolfyht, aes(x=EASTING, y = NORTHING)) + geom_point() + stat_density2d(aes(fill=..density..), geom="raster", contour=FALSE)
+```
+Basically, what we have made here is a visualyl pleasing version of the Kernel density estimator we made last week in adehabitatHR!
+
+
+# 2. Univariate Logistic Regression
+
+Now, we are going to conduct univariate logistic regression following advice from (Hosmer and Lemeshow 2000) who advocate such an approach for understanding the effect of each covariate on the probability of use. There are at least three different ways to conduct a logistic regression in most stats packages, including R, but following from lab 1 and 2, we are going to use GLM- GENERALIZED LINEAR MODEL to increase familiarity with this format.
+
+## Objective 2.1 First Simulating Binomial Distribution Data to Understand the Binomial Model
+First we will simulate a binomial random variable using the plogis function
+learn more about 
+?plogis() and ? rbinom()
+
+```{r}
+x = c(-50:50) ## just creating a uniform vector from -50 to 50. 
+y = rbinom(length(x), 1, plogis(1+0.07*x) )
+## unpack this line by ?rbinom
+## and ? plogis
+
+plot( y ~ x)
+abline(lm((y~x)))
+wrong = lm(y~x)
+summary(wrong)
+```
+What have we learned by incorrectly analyzing binary (1, 0) data by forcing a linear model (linear regression) through the origin? There has to be a better way....  Logistic Regression!
+
+```{r}
+res = glm( y~x, family=binomial(link="logit"))
+summary(res)
+yLogit=predict(res)
+plot( yLogit ~ x )
+yhat=predict(res, type="response")
+plot( y ~ x)
+lines(yhat~x)
+```
+These plots show that the slope of the logistic function is linear in the logit transformation (plot yLogit ~ x), and non-linear in real probability.  The logit link function 
+$$logit(y) = \frac{exp^(\beta_0+\beta_1*X_1+\beta_n*X_n) + e}{1 + exp(\beta_0+\beta_1*X_11+\beta_n*X_n) + e}$$
+handily keeps the real probability bounded between 0 and 1 always. 
+
+## Objective 2.1 Univariate logistic regression with glm
+
+Next we will explore logistic regression using univariate logistic regression for the variables in our wolf used-available model. 
+
+```{r}
+#?glm
+elev <- glm(used ~ Elevation2, family=binomial(logit), data=wolfkde)
+summary(elev)
+str(elev)
+## exploring univarite logistic regression
+## how to obtain 95% confidence intervals? Where are they in the output?
+## CI's using profile log-likelihood's
+confint(elev)
+## CI's using standard errors
+confint.default(elev)
+
+## odds ratio's
+exp(coefficients(elev))
+## how to obtain 95% CI's on odds ratio's
+exp(cbind(OR=coef(elev), confint(elev)))
+
+## rescaling beta coefficients and odds ratio's 
+## note that for elevation, the change in odds is for every 1 meter change in elevation. Perhaps this is not useful.
+
+wolfkde$elev100 <- wolfkde$Elevation2 / 100
+elev100 <- glm(used ~ elev100, family=binomial(logit), data=wolfkde)
+summary(elev100)
+exp(coef(elev100))
+## therefore the interpretation of the odds ratio is scale dependent
+## Unpacking logistic regression - interpreting coefficients
+## excercise in EXCEL (argh!)
+## repeat EXCEL excercise in R. 
+elevBnp = 0:3000 ## creates a new vector elevBnp with ranges from 0 - 3000 in it. 
+```
+Lets make sure we undestand the structure of the logistic regression model we just estimated using the str() command
+'str(elevBnp)'
+
+Next, lets continue by extracting predictions from our Elevation model. 
+```{r}
+elevPred = predict(elev, newdata=data.frame(Elevation2=elevBnp), type = "response") ## uses the predict function to predict Y values given the model object elev
+hist(elevPred)
+plot(elevBnp, elevPred, type="l", ylim = c(0,1.0), ylab= "Pr(Used)")
+# but were there elevations from 0 - 1300m in Banff?
+plot(wolfkde$Elevation2, wolfkde$used)
+lines(elevBnp, elevPred, type="l", ylab= "Pr(Used)", add = TRUE)
+```
+How do wolves respond to elevation? Can we make predictions about wolf use of elevations < 1000 m based on our data in Banff? What would that be called?
+
+## Objective 2.2 Interpreting Coefficients in Logistic Models
+What this example shows us is that there is a pure logistic model behind the response of wolves to elevation is only 'capturing' a range of the entire logistic function.  This is because of the logit link and the challenge of interpreting the intercept and slope expressed in the linear scale in true probabilities. 
+
+Note that just like OLS regression, the intercept and slope determine the shape of the logistic regression response in real probabilities. But it is more complicated because of the relationship between the coefficients in the linear part of the logit (e.g., Eq. 4) and their relationship to the real probabilities. This is why many, many statistical textbooks always tell students that the best way to interpret probabilities from any logistic regression is to plot them. This is especially true in logistic regression models with more than one covariate, interactions, and more complex models such as mixed-effects models.  Certainly, we can easily understand that a negative $\beta_1$ implies that the probability of the outcome, here, use, declines with increasing X. But we cannot necessarily understand or solve something like the Y intercept when X = 0, or, vice versa, what X will be when Y = 0 like we can with OLS regression. 
+
+To illustrate the effects of varying the $\beta_0$ and $\beta_1$ on the shape of the logistic regression predictions, I show here in Fig. 3.1 the effects of varying first the intercept, $\beta_0$, from -5 to 5 where $\beta_1$  was fixed at 0.05 (Fig. 9.1.a).  This shows that like the OLS regression, here, $\beta_0$ governs where Y crosses the X=0 line. Unlike OLS, however, the slopes are not parallel because of the fixed $\beta_1$  =0.05 because of the logit link function.  Second, I fixed $\beta_0$ = 0 varied the coefficient, $\beta_1$ , from -0.10 to +0.10.  
+
+
+![Figure 3.1. Effects of varying first a) the intercept, b0 , from -5 to 5 where b1  was fixed at 0.05, and b) the coefficient, b1 , where b0 = 0 on the predicted probability of 1 or 0 from the same logistic regression equation. ](/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab3/new/logisticregression1.png)
+
+A second complication is that the shape of the predicted probabilities can take on a linear, exponential, curvilinear, or the full range of the logistic regression response depending on the range of the X values. Consider the wolf elevation response above.  That is, there is *always a perfect logistic regression function predicted by any logit link function*, it just may be that the range of values observed in any particular dataset (i.e., range of X values) capture only a portion of the logistic link function as illustrated in Figure X. 
+
+![Figure 3.2. Effects of the range of X data sampled and the predictions from the logistic regression model showing in the first box a largely exponential function, the second box, a largely linear response, and in the last box, a curvilinear relationship.  The logistic regression model is very flexible in accommodating linear and many non-linear responses that are linear in the logit (Eq. 4), but non-linear in the transformed real probabilities.  ](/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab3/new/logisticregression2.png)
+
+With this in mind, lets proceed through the rest of the univariate logistic regression models. 
+
+```{r}
+## next human use
+distHuman <- glm(used ~ DistFromHumanAccess2, family=binomial(logit), data=wolfkde)
+summary(distHuman)
+hist(wolfkde$DistFromHumanAccess2)
+disthumanBnp = 0:7000
+disthumanPred = predict(distHuman, newdata=data.frame(DistFromHumanAccess2=disthumanBnp), type="response")
+hist(disthumanPred)
+plot(disthumanBnp, disthumanPred, type="l", ylab= "Pr(Used)")
+plot(wolfkde$DistFromHumanAccess2, wolfkde$used)
+lines(disthumanBnp, disthumanPred, type="l", ylab= "Pr(Used)", add = TRUE)
+```
+Similarly, how do wolves respond to human activity?
+
+Next for the ungulate H.S.I. models
+```{r}
+# now lets do all at once for ungulate HSI models
+sheep <- glm(used ~ sheep_w2, family=binomial(logit), data=wolfkde)
+summary(sheep)
+habvalues = 0:7
+deer <- glm(used ~ deer_w2, family=binomial(logit), data=wolfkde)
+summary(deer)
+elk <- glm(used ~ elk_w2, family=binomial(logit), data=wolfkde)
+summary(elk)
+moose <- glm(used ~ moose_w2, family=binomial(logit), data=wolfkde)
+summary(moose)
+goat <- glm(used ~ goat_w2, family=binomial(logit), data=wolfkde)
+summary(goat)
+```
+
+And similarly, lets examine the predicted probabilities
+```{r}
+habvalues = 0:7 ## making a vector of hsi values
+sheeppred = predict(sheep, newdata = data.frame(sheep_w2 = habvalues), type = "response")
+goatpred = predict(goat, newdata = data.frame(goat_w2 = habvalues), type = "response")
+moosepred = predict(moose, newdata = data.frame(moose_w2 = habvalues), type = "response")
+elkpred = predict(elk, newdata = data.frame(elk_w2 = habvalues), type = "response")
+deerpred = predict(deer, newdata = data.frame(deer_w2 = habvalues), type = "response")
+sheeppred = predict(sheep, newdata = data.frame(sheep_w2 = habvalues), type = "response")
+
+plot(habvalues, elkpred, type ="l", ylim = c(0,1.0), ylab = "Pr(Used)", col = "green")
+lines(habvalues, goatpred, col = "blue")
+lines(habvalues, moosepred, col = "red") 
+lines(habvalues, sheeppred, col = "black") 
+lines(habvalues, deerpred, col = "gray") 
+legend(x="topleft", legend= c("Elk","Mountain Goat", "Moose", "Sheep", "Deer"), lty=1, col = c("green", "blue", "red", "black", "gray"), bty = "n")
+
+```
+
+Now lets go back to our elevation object and save predictions from the Elevation model in the wolfkde dataframe. We can use this to plot predicted values for most situations as well. 
+```{r}
+## back to elevation
+elev <- glm(used ~ Elevation2, family=binomial(logit), data=wolfkde)
+summary(elev)
+wolfkde$fitted.Elev <- fitted(elev)
+head(wolfkde)
+hist(wolfkde$fitted.Elev)
+plot(wolfkde$fitted.Elev, wolfkde$Elevation2)
+```
+
+
+# Objective 3.0 Improving graphical predictions using ggplot2
+First lets explore the distribution of predicted values from the elevation model
+```{r}
+# ggplot 2 explore basic histogram functio
+ggplot(wolfkde, aes(x=wolfkde$fitted.Elev)) + geom_histogram()
+# lets explore faceting
+ggplot(wolfkde, aes(x=wolfkde$fitted.Elev)) + geom_histogram(binwidth=0.05, fill="gray70", colour="black") + facet_grid(used ~ .)
+ggplot(wolfkde, aes(x=wolfkde$fitted.Elev)) + geom_histogram(binwidth=0.05, fill="gray70", colour="black") + facet_grid(used ~ ., scales = "free")
+ggplot(wolfkde, aes(x=wolfkde$fitted.Elev, fill=usedFactor)) + geom_histogram(binwidth=0.05, position="identity", alpha=0.7) + xlab("Predicted Probability of Wolf Use") + theme(axis.title.x=element_text(size=16))
+# lets redo this graph using faceting by pack
+ggplot(wolfkde, aes(x=wolfkde$fitted.Elev, y=..density.., fill=usedFactor)) + geom_histogram(binwidth=0.05, position="identity", alpha=0.7) + xlab("Predicted Probability of Wolf Use") + theme(axis.title.x=element_text(size=16)) + facet_grid(pack ~ ., scales="free")
+```
+This gives us a firm sense that things differ by pack
+
+```{r}
+# Now lets explore fitting functions to the distributions
+ggplot(wolfkde, aes(x=wolfkde$fitted.Elev)) + geom_density()
+ggplot(wolfkde, aes(x=wolfkde$fitted.Elev), fill=usedFactor) + geom_density(alpha=0.5) + xlim(0,1)+xlab("Predicted Probability of Wolf Use") + theme(axis.title.x=element_text(size=16)) 
+# kernel lines
+ggplot(wolfkde, aes(x=wolfkde$fitted.Elev, y=..density.., fill=usedFactor)) + geom_histogram(binwidth=0.05) + geom_density(alpha = 0.5) + facet_grid(pack ~ .)
+
+```
+
+## Plotting Logistic Regresson with ggplot2
+ggplot2 has a great handy function called + stat_smooth for plotting logistic regression. 
+```{r}
+# Exploring Predictions as a function of covariates
+#___________
+# this fits a univariate glm as a function of elevation and predicts
+ggplot(wolfkde, aes(x=Elevation2, y=used)) + geom_point() + stat_smooth(method="glm", method.args = list(family="binomial"))
+
+#
+ggplot(wolfkde, aes(x=DistFromHumanAccess2, y=used)) + geom_point() + stat_smooth(method="glm", method.args = list(family="binomial"))
+ggplot(wolfkde, aes(x=elk_w2, y=used)) + geom_point() + stat_smooth(method="glm", method.args = list(family="binomial"))
+## but whats up with the dots? - lets jitter and see
+ggplot(wolfkde, aes(x=elk_w2, y=used)) + geom_point() +geom_jitter(aes(colour = used), width=0.25, height = 0.05) + stat_smooth(method="glm", method.args = list(family="binomial"))
+```
+What the jittering shows is the nice, clear separation between 0's and 1's. MOST 1's are > 4 H.S.I. ranking scores, and similarly, most 0's are < 5 HSI score. 
+```{r}
+## lets redo elevation jittered by used
+ggplot(wolfkde, aes(x=Elevation2, y=used)) + geom_point() +geom_jitter(aes(colour = used), width=0.25, height = 0.05)+ stat_smooth(method="glm", method.args = list(family="binomial"))
+
+# Splitting by wolf pack and change the confidence interval to 99th
+ggplot(wolfkde, aes(x=Elevation2, y=used, colour=pack)) + geom_point() + stat_smooth(method="glm", method.args = list(family="binomial"), level=0.99)
+
+ggplot(wolfkde, aes(x=Elevation2, y=used, colour=pack)) + geom_point() + geom_jitter(width=0.25, height = 0.05) +stat_smooth(method="glm", method.args = list(family="binomial"), level=0.90)
+```
+This is the first analysis that shows us the two wolf packs respond very differently to elevation.  I wonder if they respond differently to Moose, or Sheep, say?
+
+```{r}
+ggplot(wolfkde, aes(x=moose_w2, y=used, colour=pack)) + stat_smooth(method="glm", method.args = list(family="binomial"))
+
+ggplot(wolfkde, aes(x=sheep_w2, y=used, colour=pack)) + stat_smooth(method="glm", method.args = list(family="binomial"))
+```
+This provides ample evidence that perhaps we should not be pooling over both wolf packs and paves the way for your homework this week. 
+You can also facet by pack, and put each pack in its own panel. 
+```{r}
+# versus faceting by wolf pack
+ggplot(wolfkde, aes(x=Elevation2, y=used)) + geom_point() + stat_smooth(method="glm", method.args = list(family="binomial"), level=0.90) + facet_grid(pack~.)
+```
+And finally, this last plot again illustrates the futility of fitting a linear model (lm) to binary data compared against the predictions from the elev model. 
+```{r}
+# this function plots predictions from the previously fitted best model
+ggplot(wolfkde, aes(x=Elevation2, y=fitted.Elev)) + geom_point() + stat_smooth(method=lm) + ylim(0, 0.8)
+
+```
+
+Lastly, I will illustrate our first use of the effects package which is especially nice later for quickly visualizing interactions
+```{r}
+plot(effect("Elevation2", elev), grid=TRUE) 
+plot(effect("deer_w2", deer), grid=TRUE)
+## but note the scales are stretched to linearize the response
+```
+
+## Objective 3.3 Saving graphics 
+It is a HUGE time saver to use R to make publication quality figures
+see here: https://www.r-bloggers.com/creating-publication-quality-graphics-using-r/
+and https://www.r-bloggers.com/high-resolution-figures-in-r/
+
+```{r}
+#Printing PDFs from R
+pdf("wolf_elev.pdf", width=4, height=4)
+print(ggplot(wolfkde, aes(x=Elevation2, y=used)) + geom_point(colour="gray") + stat_smooth(method="glm", method.args = list(family="binomial")) + xlab("Prey H.S.I") + ylab("Predicted Probability of Wolf Use"))
+dev.off()
+# then go and look in the active directory for wolf_elev.pdf
+#or
+ggsave("elev_wolf2.pdf", width=4, height=4)
+#
+```
+
+Now - how to make a figure of all 5 prey species predictions ## code figured out from Latham et al. (2013) in Ecography
+
+Latham, A. D. M., M. C. Lathan, K. H. Knopff, M. Hebblewhite, and S. Boutin. 2013. Wolves, deer and beaver: implications of prey enrichment and seasonal prey swtiching for woodland caribou declines. . Ecography 36:001 - 015.
+![Figure 3.3. Relative probability of wolf resource selection in (a) winter (October–March) and (b) summer (April–September) in the West and East Sides of the Athabasca River caribou ranges, northeastern Alberta, Canada, 2006–2008.](/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab3/new/Latham et al_ECOGRAPHY_E0035 2.jpg)
+
+
+```{r}
+fig3<-ggplot(wolfkde, aes(x=elk_w2, y=used)) + geom_smooth(data = wolfkde, aes(x=elk_w2, y=used, col="Elk"),method="glm", method.args = list(family="binomial")) + geom_smooth(data = wolfkde, aes(x=deer_w2, y=used, col="Deer"),method="glm", method.args = list(family="binomial"))+ geom_smooth(data = wolfkde, aes(x=moose_w2, y=used, col="Moose"),method="glm", method.args = list(family="binomial"))+ geom_smooth(data = wolfkde, aes(x=sheep_w2, y=used, col="Sheep"),method="glm", method.args = list(family="binomial"))+ geom_smooth(data = wolfkde, aes(x=goat_w2, y=used, col="Goat"),method="glm", method.args = list(family="binomial")) + xlab("Relative probability of summer prey resource selection") + ylab("Relative probability of summer wolf resource selection") + theme(axis.title.y=element_text(size=18), axis.text.y=element_text(size=18)) + theme(axis.title.x=element_text(size=18), axis.text.x=element_text(size=18))+ labs(fill="Prey Species")
+## lets save this
+pdf("fig3.pdf", width=4, height=4)
+fig3
+dev.off()
+```
+Now, remember that the figure is saved in your working directory. 
+
+
+# Literature Cited
+
+Boyce, M. S. and L. L. McDonald. 1999. Relating populations to habitats using resource selection functions. Trends in ecology and evolution 14:268-272.
+
+Hosmer, D. W. and S. Lemeshow, editors. 2000. Applied Logistic Regression. John Wiley and Sons, New York.
+
+Manly, B. F. J., L. L. McDonald, D. L. Thomas, T. L. McDonald, and W. P. Erickson, editors. 2002. Resource selection by animals: statistical analysis and design for field studies. Second Edition. Kluwer, Boston, USA.
+
+
+#Homework 3: LAB 3 – ASSIGNMENT 
+Due in Lab Tuesday, February 5, 2019
+
+Answer the following questions in your lab report following the exact guidelines of lab 2, feeling free to use TABLES and FIGURES properly labeled and in JWM format.
+
+1. Summarize the patterns of univariate selection you have examined for ALL covariates pooled across wolf packs and then separated by wolf packs (new). Answer the following question.
+  a. What are the most important variables (strongest) in their univariate effect on wolf resource selection? What are the effects?
+  b. How do the patterns of selection observed this week relate to the analysis of USE from lab 2? 
+  c. How do the effects of covariates differ between wolf packs?
+
+2)	Repeat (on your own) the steps required to merge the USED wolf data with the AVAILABLE wolf pack data from the 95% MCP Home ranges we developed in LAB 2.  Note – this may mean you need to quickly re-run Lab 2 to save the MCP home ranges, and sample 1000 random availability points within these MCP’s. 
+
+3)	With the merged USED/AVAIL dataset for 95% MCP home ranges, repeat the analyses in this lab – what are the main differences (if any) between the MCP and Kernel home range estimates of Availability?? 
