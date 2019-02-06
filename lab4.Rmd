@@ -209,6 +209,12 @@ names(all_rasters)
 ```
 Note that when we created the raster stack with the new, resampled landcover2, we did not get an error message. 
 
+Now we can plot all rasters in our raster stack very easily. 
+```{r}
+plot(all_rasters)
+```
+This shows us that while the extents are now the same, there are different 'real' extents for many of the differnet GIS layers. This is something we will have to address later. 
+
 ## Re-Running Lab 2 from Source
 Next we are going to re-extract covariate values for the wolf used and available datasets based on the Kernel density estimate from Lab 2. Recall that first we use the rd.data and rd.avail datasets which were a spatialDataPointsFrame needed from Lab 2. 
 
@@ -216,10 +222,10 @@ Instead of going all the way back to lab 2 and redoing everything again, we are 
 ```
 ?source
 ```
-We are going to have to make sure our working directory in the Lab2NeededforLab5.R file is correctly pointed to where we have the wolfyht.shp file (in Lab 4/new)
+We are going to have to make sure our working directory in the Lab2NeededforLab4.R file is correctly pointed to where we have the wolfyht.shp file (in Lab 4/new)
 
 ```{r}
-source("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab4/new/Lab2NeededforLab5.R", verbose = FALSE)
+source("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab4/new/Lab2NeededforLab4.R", verbose = FALSE)
 ```
 
 Now look at your R objects and see that indeed, you now have rd.data, bv.data, etc. re-estimated from lab 2 to re-extract. Cool!
@@ -402,17 +408,17 @@ table(wolfkde3$landcov.f, wolfkde3$usedFactor)
 ```
 
 ## Univariate Selection Ratio's
-First we will estimate Manly's selection ratio by comparing the ratio of used and available locations to each other, and taking the natural logarithm of those in R. Manly et al. (2002) provide a methodology for this kind of design, relying on the calculation of selection ratios:
+First we will estimate Manly's selection ratio by comparing the ratio of used and available locations to each other, and taking the natural logarithm of those in R. Manly et al. (2002) Chapter 1 Readings provide an overview and methodology for this kind of design, relying on the calculation of selection ratios:
 
-$$\omega_j = \upsilon_j*\alpha_i$$
+$$\omega_j = \frac {\upsilon_j}{\alpha_i}$$
 where $\upsilon_j$ is the proportion of use of the habitat class __j__ and $\alpha_i$ is the proportion of availability of this habitat class __j__.
 Note that these ratios may be scaled so that their sum is equal to 1, that is:
 $$\beta_j = \frac{\omega_j}{\sum_{i=1}^j \alpha_i}$$
-where $\beta_j$ is said to be the Manly Selectivity Coefficient for habitat class __j__. We will see below when we perform logistic regression on this same categorical dataset the relationship between Manly's selectivity coefficient, $\beta_j$,  and that estimated from logistic regression. 
+where $\beta_j$ is said to be the Scaled Selectivity Coefficient for habitat class __j__. 
 
 Note that it is customary to take the natural logarithmic transformation of the $\omega_j$ to make the selectivity index symmetric for the same amount of increase or decrease of use or availability. This is a similar property in population ecology to the difference between lambda, the ratio of two population sizes which estimates the absolute growth rate, to little r, or intrinsic population growth rate, which measures the relative growth rate. So we have 
-$$\ln(\omega_j) = \upsilon_j*\alpha_i$$
-This is often referred to as the ln of the selection ratio, or the Selection index. 
+$$\ln(\omega_j) = ln(\frac {\upsilon_j}{\alpha_i})$$
+This is often referred to as the ln of the selection ratio, or Manly's Selection index. 
 
 We will now calculate selectivity statistics, both untransformed (which we can call the selection ratio) and ln-transformed selectivity index using our data frame of the availability and use by wolves for our ~ 16 'landcover' types in Banff National Park. To do this, we have to use the random points and used points to represent the proportional use $\upsilon_j$and availability $\alpha_i$components of the equations above, respectively. 
 
@@ -456,16 +462,17 @@ stat_smooth()
 Discussion: why is the relationship between the seleciton ratio and the Ln selection ration curvilinear like this?
 
 
-# Selection Ratio's in adehabitatHS
-Next, we will use the adehabitat package functions to estimate selection ratio's for proportional availability and use data following Manly et al. 2003.  We will 
-Example of Elk (Manly et al., 2003, p.62). This is a classic study based on the original work of my predecessor here at the University of Montana, C.Les Marcum, and worth a moment to reflect on. This is amongst the first statistical test for whether or not habitat selection occurs in animals. This method assumes: (i) independence between animals, and (ii) all animals are selecting habitat in the same way. Moreover, the overall hypothesis tested is that the use of resource categories differs from random availability, thats it.  Since the 1980's we have learned that this is often not a very interesting hypothesis to test, since we know it true that animals almost always use resources in a selective way, nonetheless, this is where the field started. 
+## Selection Ratio's in adehabitatHS
+Next, we will use the adehabitat package functions to estimate selection ratio's for proportional availability and use data following Manly et al. 2003.  We will use the example of Elk (Manly et al., 2003, p.62). This is a classic study based on the original work of my predecessor here at the University of Montana, C.Les Marcum, and worth a moment to reflect on. 
+
+This is amongst the first statistical test for whether or not habitat selection occurs in animals. This method assumes: (i) independence between animals, and (ii) all animals are selecting habitat in the same way. Moreover, the overall hypothesis tested is that the use of resource categories differs from random availability, thats it.  Since the 1980's we have learned that this is often not a very interesting hypothesis to test, since we know it true that animals almost always use resources in a selective way, nonetheless, this is where the field started. 
 
 __References__
 Marcum, C.L. & Loftsgaarden, D.O. (1980) A nonmapping technique for studying habitat preferences. Journal of Wildlife Management, 44, 963-968.
 
 This shows examples with the older adehabitat package, note these are now part of adehabitatHS
-[link](https://rdrr.io/cran/adehabitat/man/wi.html) 
-[link](http://www2.uaem.mx/r-mirror/web/packages/adehabitatHS/vignettes/adehabitatHS.pdf) 
+[adehabitat package](https://rdrr.io/cran/adehabitat/man/wi.html) 
+[adehabitatHS vignette/demo](http://www2.uaem.mx/r-mirror/web/packages/adehabitatHS/vignettes/adehabitatHS.pdf) 
 ```{r}
 ## Estimated available proportions on design I data
 elk.avail <- c(15, 61, 84, 40)
