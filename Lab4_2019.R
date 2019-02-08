@@ -276,21 +276,33 @@ table(wolfkde3$landcov.f, wolfkde3$usedFactor)
 ## Univariate Selection Ratio's
 
 
-table(wolfkde3$landcov.f, wolfkde3$usedFactor)
-landcovSelection <- table(wolfkde3$landcov.f, wolfkde3$usedFactor)
+table(wolfkde3$habitatType, wolfkde3$usedFactor)
+landcovSelection <- table(wolfkde3$habitatType, wolfkde3$usedFactor)
 landcovSelection2 <- as.data.frame.matrix(landcovSelection)
 colnames(landcovSelection2)[1:2] <- c("avail","used")
-landcovSelection2$selection <- landcovSelection2$used / landcovSelection2$avail
+## Calculate Proportional Availability
+landcovSelection2$pUse <- landcovSelection2$used /413
+landcovSelection2$pAvail <- landcovSelection2$avail /1996 # not 2000 because of censored cloud and NA's. 
+
+## Now, lets calculate the selection ratio using the proportions of use and availability
+landcovSelection2$selection <- landcovSelection2$pUse / landcovSelection2$pAvail
+
+## compare the two - they are absolutely LINEARLY related, but, only the ratio of pUse/pAvail is interpretable as a selection ratio about 1.0. 
+## NExt, lets calculate the selection ratio using JUST the # of locations (incorrect)
+landcovSelection2$selectionN <- landcovSelection2$used / landcovSelection2$avail
+plot(landcovSelection2$selection, landcovSelection2$selectionN)
+
 ## LEts take a look, this is the selection ratio, the ratio of the proportion used to the prortion available from our first equation above. 
-landcovSelection2$selection
+landcovSelection2
 ## Next we take the natural logarithm, ln() which in R is represented by log()
 landcovSelection2$lnSelection <- log(landcovSelection2$selection)
-landcovSelection2
-## lets make a new field called landcover Type
-landcovSelection2$landcoverType <- unique(wolfkde3$landcov.f)
-## lets make a plot of the Manly Selectivity Coefficients
-plot(unique(wolfkde3$landcov.f), landcovSelection2$lnSelection, las=2)
 
+## Lets make a new column of habitatType
+landcovSelection2$landcoverType <- c("Alpine Herb", "Alpine Shrub", "Burn-Forest", "Burn-Grassland", "Burn-Shrub", "Closed Conifer", "Deciduous", "Herbaceous", "Mixed", "Moderate Conifer" ,"Open Conifer", "Regen", "Rock-Ice", "Shrub", "Water")
+
+
+## lets make a plot of the Manly (ln) Selectivity Coefficients
+ggplot(data=landcovSelection2, aes(x=landcoverType, y = lnSelection)) + geom_point(size=4) + theme(axis.text.x = element_text(angle = 90))
 ## it might be handy to save this
 
 write.table(landcovSelection2, "wolfselection.csv", sep=",", row.names = TRUE, col.names=TRUE)
@@ -302,12 +314,12 @@ str(landcovSelection2)
 ggplot(landcovSelection2, aes(x=landcoverType, y = selection)) + geom_bar(stat="Identity") + theme(axis.text.x = element_text(angle = 90))
 
 ## Ln-Selection Ratio
-ggplot(landcovSelection2, aes(x=landcoverType, y = lnSelection)) + geom_bar(stat="Identity") + theme(axis.text.x = element_text(angle = 90))#
+ggplot(landcovSelection2, aes(x=landcoverType, y = lnSelection)) + 
+  geom_bar(stat="Identity") + theme(axis.text.x = element_text(angle = 90))
 
 # What is the relationship between the selection ratio and the Ln-Selection Ratio?
 ## Fancier ggplot
-ggplot(landcovSelection2, aes(x=selection, y = lnSelection)) + stat_smooth()
-                                                                    
+ggplot(landcovSelection2, aes(x=selection, y = lnSelection)) + stat_smooth()                                                                
 # Discussion: why is the relationship between the seleciton ratio and the Ln selection ration curvilinear like this?
                                                                     
 # Selection Ratio's in adehabitatHS

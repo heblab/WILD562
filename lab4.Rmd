@@ -77,6 +77,7 @@ Wegmann, M., Leutner, B. & Dech, S. (2016) Remote Sensing and GIS for Ecologists
 ```{r}
 setwd("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab4/landcover/")
 landcover<-raster("landcover")
+landcover<-raster("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab4/landcover/landcover")
 image(landcover, col=rainbow(16))
 #str(landcover)
 landcover@data@attributes
@@ -314,7 +315,7 @@ write.table(wolfkde, file = "/Users/mark.hebblewhite/Box Sync/Teaching/UofMcours
 wolfkde <- read.csv("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab4/new/wolfkde.csv", sep=",")
 ```
 
-Now we can make a single nice plot of the X and Y locations by Used by Pack, where used locaitons are a bright blue, and available locations are dark blue. 
+Now we can make a single nice plot of the X and Y locations by Used by Pack, where used locations are a bright blue, and available locations are dark blue. 
 ```{r}
 ggplot(wolfkde, aes(x=EASTING, y = NORTHING, color=usedFactor)) + geom_point() + stat_density2d() + facet_grid(pack ~ ., scales="free")
 
@@ -404,40 +405,57 @@ wolfkde3$landcov.f = factor(wolfkde3$landcover16,labels = names.m$unique.wolfkde
 #Note that there are many alternative ways of defining your landcover/habitattype 
 # as a factor. This method seemed most explicit in terms of defining the design matrix
 table(wolfkde3$landcov.f, wolfkde3$usedFactor)
+table(wolfkde3$landcov.f, wolfkde3$landcover16)
  
 ```
 
 ## Univariate Selection Ratio's
 First we will estimate Manly's selection ratio by comparing the ratio of used and available locations to each other, and taking the natural logarithm of those in R. Manly et al. (2002) Chapter 1 Readings provide an overview and methodology for this kind of design, relying on the calculation of selection ratios:
 
-$$\omega_j = \frac {\upsilon_j}{\alpha_i}$$
-where $\upsilon_j$ is the proportion of use of the habitat class __j__ and $\alpha_i$ is the proportion of availability of this habitat class __j__.
-Note that these ratios may be scaled so that their sum is equal to 1, that is:
-$$\beta_j = \frac{\omega_j}{\sum_{i=1}^j \alpha_i}$$
-where $\beta_j$ is said to be the Scaled Selectivity Coefficient for habitat class __j__. 
+$$\omega_i = \frac {\upsilon_i}{\alpha_i}$$
+where $\upsilon_i$ is the proportion of use of the habitat class __i__ and $\alpha_i$ is the proportion of availability of this habitat class __i__. Here, there are 1... __j__ habitat categories. 
 
-Note that it is customary to take the natural logarithmic transformation of the $\omega_j$ to make the selectivity index symmetric for the same amount of increase or decrease of use or availability. This is a similar property in population ecology to the difference between lambda, the ratio of two population sizes which estimates the absolute growth rate, to little r, or intrinsic population growth rate, which measures the relative growth rate. So we have 
-$$\ln(\omega_j) = ln(\frac {\upsilon_j}{\alpha_i})$$
+Note that these ratios may be scaled so that their sum is equal to 1, that is:
+$$\beta_i = \frac{\omega_i}{\sum_{i=1}^j \omega_j}$$
+where $\beta_j$ is said to be the Scaled Selectivity Coefficient for habitat class __i__.  This has the interpretation of being the estimated probability that a category __i__ resource unit would be selected if each category from 1... __j__ was equally available. 
+
+Note that it is customary to take the natural logarithmic transformation of the $\omega_i$ to make the selectivity index symmetric for the same amount of increase or decrease of use or availability. This is a similar property in population ecology to the difference between lambda, the ratio of two population sizes which estimates the absolute growth rate, to little r, or intrinsic population growth rate, which measures the relative growth rate. So we have 
+$$\ln(\omega_j) = ln(\frac {\upsilon_j}{\alpha_j})$$
 This is often referred to as the ln of the selection ratio, or Manly's Selection index. 
+
 
 We will now calculate selectivity statistics, both untransformed (which we can call the selection ratio) and ln-transformed selectivity index using our data frame of the availability and use by wolves for our ~ 16 'landcover' types in Banff National Park. To do this, we have to use the random points and used points to represent the proportional use $\upsilon_j$and availability $\alpha_i$components of the equations above, respectively. 
 
 ```{r}
-table(wolfkde3$landcov.f, wolfkde3$usedFactor)
-landcovSelection <- table(wolfkde3$landcov.f, wolfkde3$usedFactor)
+table(wolfkde3$habitatType, wolfkde3$usedFactor)
+landcovSelection <- table(wolfkde3$habitatType, wolfkde3$usedFactor)
 landcovSelection2 <- as.data.frame.matrix(landcovSelection)
 colnames(landcovSelection2)[1:2] <- c("avail","used")
-landcovSelection2$selection <- landcovSelection2$used / landcovSelection2$avail
+## Calculate Proportional Availability
+landcovSelection2$pUse <- landcovSelection2$used /413
+landcovSelection2$pAvail <- landcovSelection2$avail /1996 # not 2000 because of censored cloud and NA's. 
+
+## Now, lets calculate the selection ratio using the proportions of use and availability
+landcovSelection2$selection <- landcovSelection2$pUse / landcovSelection2$pAvail
+
+## compare the two - they are absolutely LINEARLY related, but, only the ratio of pUse/pAvail is interpretable as a selection ratio about 1.0. 
+## NExt, lets calculate the selection ratio using JUST the # of locations (incorrect)
+landcovSelection2$selectionN <- landcovSelection2$used / landcovSelection2$avail
+plot(landcovSelection2$selection, landcovSelection2$selectionN)
+
 ## LEts take a look, this is the selection ratio, the ratio of the proportion used to the prortion available from our first equation above. 
-landcovSelection2$selection
+landcovSelection2
 ## Next we take the natural logarithm, ln() which in R is represented by log()
 landcovSelection2$lnSelection <- log(landcovSelection2$selection)
-landcovSelection2
-## lets make a new field called landcover Type
-landcovSelection2$landcoverType <- unique(wolfkde3$landcov.f)
-## lets make a plot of the Manly Selectivity Coefficients
-plot(unique(wolfkde3$landcov.f), landcovSelection2$lnSelection, las=2)
+
+## Lets make a new column of habitatType
+landcovSelection2$landcoverType <- c("Alpine Herb", "Alpine Shrub", "Burn-Forest", "Burn-Grassland", "Burn-Shrub", "Closed Conifer", "Deciduous", "Herbaceous", "Mixed", "Moderate Conifer" ,"Open Conifer", "Regen", "Rock-Ice", "Shrub", "Water")
+                          
+
+## lets make a plot of the Manly (ln) Selectivity Coefficients
+ggplot(data=landcovSelection2, aes(x=landcoverType, y = lnSelection)) + geom_point(size=4) + theme(axis.text.x = element_text(angle = 90))
 ```
+
 This is a simple histogram of the Manly's ln-transformed selectivity coefficients as a function of landcover types. Why did we get the error messages about infinity??
 ```{r}
 ## it might be handy to save this
@@ -456,8 +474,7 @@ geom_bar(stat="Identity") + theme(axis.text.x = element_text(angle = 90))
 What is the relationship between the selection ratio and the Ln-Selection Ratio?
 ```{r}
 ## Fancier ggplot
-ggplot(landcovSelection2, aes(x=selection, y = lnSelection)) + 
-stat_smooth()
+ggplot(landcovSelection2, aes(x=selection, y = lnSelection)) + stat_smooth()
 ```
 Discussion: why is the relationship between the seleciton ratio and the Ln selection ration curvilinear like this?
 
