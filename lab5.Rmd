@@ -1,0 +1,982 @@
+---
+title: 'WILD 562 Lab5 : Multiple Logisitic Regression & Model Selection'
+author: "Mark Hebblewhite"
+date: "`r format(Sys.time(), '%B %d, %Y')`"
+output:
+  html_document:
+    number_sections: yes
+    self_contained: yes
+    theme: simplex
+    toc: yes
+    toc_float: yes
+---
+---
+# Lab5: Multiple Logisitic Regression & Model Selectionn
+
+General introduction to the biological rationale of this lab was given in the Lab 2-4 lab introductions. In Lab 5, we extend the analysis of habitat use by wolves in two wolf packs from 2001-2005 in Banff National Park to multivariate analysis of habitat selection using  multiple logistic regression to estimate a resource selection function (RSF) as a function of the availability of resources.  
+
+First, we will deal with the problem of teasing apart correlated independent variables to use in multiple logistic regression models for RSF models. Second, we will use our biological knowledge of the system and the correlations between variables to develop an a-priori set of candidate models that minimize problems from confounded variables following the philosophy of the information theoretic approach to data analysis ( Burnham and Anderson 1998, Anderson et al. 2000). 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE, root.dir = '/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab5/')
+```
+
+## 0.1 Preliminaries: setting packages
+```{r load packages, include=FALSE}
+#function to install and load required packages
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, repos = "http://cran.us.r-project.org", dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+#load or install these packages:
+packages <- c("car", "lattice", "ggplot2", "MASS", "AICcmodavg", "MuMIn", "effects", "corrgram", "GGally", "bootStepAIC", "broom", "plyr", "magrittr")
+
+#run function to install packages
+ipak(packages)
+```
+
+## 0.2 Preliminaries: setting working directories and importing data
+```{r}
+### Define a text string that defines where your folder is
+laptop = "/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab5"
+setwd(laptop)
+wolfkde <- read.csv("wolfkde.csv", header=TRUE, sep = ",", na.strings="NA", dec=".")
+```
+
+# Multiple Logistic Regression & Collinearity
+
+We will use logistic regression, a type of generalized linear model and member of the family of binomial models using the logit link function that relate the linear predictor vector of covariates to the probability function via the logistic function. This is a very useful model where we have binomial categorical outcomes such as used (which is set to =1) or available/un-used (which is set to =0). The basic equation is:
+
+$$logit(y) = \frac{exp^(\beta_0+\beta_1*X_1) + e}{1 + exp(\beta_0+\beta_1*X_11) + e}$$
+
+where y is the probability of a 1 (in true logistic regression), $\beta_0$ is the baseline probability, or intercept, $\beta_1$ is the coefficient of covariates $X_1$, respectively. Critically, $e$ is the error term, which we have mostly breezed by so far this semester.  The assumptions of any regression model are said to be ~ $ iid$, where data are 
+1) identically distributed (homogenously distributed)
+2) independent
+3) distributed according to some distributional assumptions, e.g., for Normal gaussian linear models, we assume the data are $ ~ N(\mu, \sigma)$ where the parameters of the normal distrution, $N$, are mean, $\mu$, and variance equal to the standard deviation here, $\sigma$. 
+
+In binomial logistic regression, the assumptions are the same, but the error variance is reported as $ ~ Bin(p)$ where the errors are said to be binomially distributed according to some probability, $p$. 
+
+In multiple regression of any type, we now have one more assumption. Note that in multiple logistic regression, we now have: $$logit(y) = \frac{exp^(\beta_0+\beta_1*X_1+\beta_n*X_n) + e}{1 + exp(\beta_0+\beta_1*X_11+\beta_n*X_n) + e}$$
+where y is the probability of a 1 (in true logistic regression), $\beta_0$ is the baseline probability, or intercept, $\beta_1$ and $\beta_n$ are the _partial_ coefficients of covariates $X_1....X_n$, respectively.  In this context, the $\beta_n$'s are the partial regression coefficients of the effect of $\beta_n$ on $X_n$ __holding the effects of all other $X_n$'s constant at their mean__ value. We shall explore the consequences of this assumption in today' lab. 
+
+Thus, the _NEW_ assumption of multiple logistic regression that is NECESSARY to be able to interpret the $\beta_n$ as the _partial_ coefficients is this:
+
+4. For $\beta_1$ and $\beta_n$ to be valid, $X_1$ and all $X_n$'s must be independent, and uncorrelated.  This is the BIGGEST challenge and problem of multiple regression of any type. 
+
+## Revisiting Univariate Regressions from Lab 2
+
+We will first evaluate collinearity between Distance to High Human Use and Elevation
+```{r}
+## First lets fit Univariate models of these 2 covariates
+elev <- glm(used~Elevation2, data =wolfkde, family= binomial(logit))
+disthhacc <-  glm(used~DistFromHighHumanAccess2, data =wolfkde, family= binomial(logit))
+
+# Next, fit both in our first multiple logistic regression model
+elev.disthhacc <- glm(used~Elevation2 +DistFromHighHumanAccess2 , data =wolfkde, family= binomial(logit))
+summary(elev.disthhacc)
+# now lets extract coefficients
+
+summary(elev)$coefficients[,1:2]
+summary(disthhacc)$coefficients[,1:2]
+summary(elev.disthhacc)$coefficients[,1:2]
+```
+What just happened to the coefficient for Distance to High Human Access? Why did it change, in fact, flip signs from having a negative effect to a positive effect when combined in the model with Elevation? 
+
+Let us visually explore differences between the coefficients from the Univariate models versus the multiple logistic regression model with elevation + distance to high human access. 
+```{r}
+## lets visually explore differences
+disthumanBnp = 0:7000
+prDisthhacc <- predict(disthhacc, newdata=data.frame(DistFromHighHumanAccess2=disthumanBnp), type="response")
+head(prDisthhacc)
+
+plot(wolfkde$DistFromHighHumanAccess2, wolfkde$used)
+lines(disthumanBnp, prDisthhacc, type="l", ylab= "Pr(Used)")
+```
+
+Now lets do the same for the Multiple Logistic regression model but now we have 2 sets of covariates to consider, elevation and distance from high human access. 
+
+This gives us our first problem - how do we plot the effects of elevation on Pr(Use) at the same time as Distance to High Human Access?  This is the core assumption of the interpretation of the $\beta_e$ coefficient, where Be is the elevation coefficient - that it represents the effects of, say, $\beta_h$ (the human access coefficient) on the Probability of Use, holding the effects of Elevation constant at the mean.
+
+Thus, lets determine the 'median' elevation (note mean = median in a truly normally distributed covariate). 
+```{r}
+summary(wolfkde$Elevation2)
+## ok - lets evaluate the probability of use at 1931 meters from the elev.disthhacc model
+meanElev = 1931
+prElevMedian.Disthhacc <- predict(elev.disthhacc, newdata=data.frame(DistFromHighHumanAccess2=disthumanBnp, Elevation2=meanElev), type="response")
+```
+
+Note here we have to pass covariate vectors for BOTH $\beta_e$ and $\beta_h$ to predict() function. We pass the distance vector we created above, but then set elevation constant at the mean elevation.  Lets take a look at the predicted probabilities from our original univariate regression model - plotted above, and, second, the predicted probabilities at the mean elevation from the multivariate model. 
+```{r}
+plot(wolfkde$DistFromHighHumanAccess2, wolfkde$used, xlim=(c(0,10000)))
+lines(disthumanBnp, prElevMedian.Disthhacc, type="l", ylab= "Pr(Used)")
+lines(disthumanBnp, prDisthhacc, type="l", ylab= "Pr(Used)")
+```
+
+What is going on?? how did the coefficient switch sign?
+
+##  Partial Regression Coefficients 
+In multiple linear or logistic regression the B's now change interpretation to the effects of X2 on Y while holding effects of X1 constant at their mean.
+
+The previous plot was only plotted for 1 level of Elevation at the median elevation of 1900m lets create a new data framew with elevations and distance to high human access varying in 10 levels
+```{r}
+## using the pretty() function 
+#? pretty
+newdata <- expand.grid(Elevation2 = pretty(wolfkde$Elevation2, 5), DistFromHighHumanAccess2 = pretty(wolfkde$DistFromHighHumanAccess2, 10))
+head(newdata)
+newdata$prElev.Disthha <-predict(elev.disthhacc, newdata, type="response")
+
+ggplot(newdata, aes(x = DistFromHighHumanAccess2, y = prElev.Disthha)) + geom_line() + facet_wrap(~Elevation2)
+## Can we hold effects of X1 constant while varying X1?
+```
+
+## Collinearity and Correlations
+
+Why are Elevation and DistHighHumanUse changing? They are CORRELATED! Lets formally test the new assumption of multiple linear regression using Pearsons correlation test.  Second, we will fit a linear model of distance as a function of elevation to see the regression coefficient between the two, and finally, we will plot elevation and distance using two approaches. 
+```{r}
+cor.test(wolfkde$Elevation2, wolfkde$DistFromHighHumanAccess2)
+elev_disthha <- lm(DistFromHighHumanAccess2~Elevation2, data=wolfkde)
+summary(elev_disthha)
+
+plot(wolfkde$Elevation2,wolfkde$DistFromHighHumanAccess2, type="p")
+abline(lm(DistFromHighHumanAccess2~Elevation2, data=wolfkde), col="red")
+## Can we hold effects of X1 constant while varying X1?
+## showing it both ways
+
+pairs(~Elevation2+DistFromHighHumanAccess2, data=wolfkde, main="Scatterplot Matrix")
+```
+These analyses clearly demonstrate that elevation and distance to High Human Access are _correlated_, i.e., there are no areas far from high human access at LOW elevations. _Collinearity_ is synonymous with a high correlation. Collinearity is defined as the existence of a strong correlation between two or more (when 3 or more variables are correlated its termed multicollinearity) independent variables in a linear regression model. The strength of the correlation makes it difficult to disentangle the effects of the two or more variables on the dependent variable, and violates the assumption of independent random variables for linear models.
+
+The Pearsons correlation coefficient was very significant, with $\rho$ = 0.53, meaning that ~ 53% of the variation in elevation was explained by distance and vice versa.  When we conducted a linear regression of the two, we saw that for every meter further from high human access, we increased in elevation by 4 meters on average. Also recall that the Coefficient of Determination, $r^2$, is the $\rho$ squared. 
+
+Moreover, we have also seen that our two covariates here, elevation and distance, are MORE than correlated - they are __confounded__ in the sense that the coefficient of distance to high human access changed DRAMATICALLY in the presence of elevation. This is more than just a violation of the assumptions of multiple logistic regression - it is a result of poor experimental design, and cannot readily be remedied using fancy statistics. The bottom line is that we did not study wolves at low elevations that were far from human access. Thus we will never really be able to make strong inferences about what wolves would do at low elevations in the absence of human activity.   We will discuss this in class, but this is a case of confounded experimental design that all the sophisticated statistics in the world will not resolve. 
+
+In practice, there are few observational regression analyses in ecology where covariates are truly not correlated at all.  This is the point of a STRONG experimental design where one isolates and controls critical variables of interest. There are many published sets of guidelines for how collinear is too collinear for two covariates to include in the same models.  However, the guidelines range from a $\rho$ of 0.3 - 0.7 according to various sources. 
+
+The key reason why there is no hard and fast guidelines for a threshold that is set and stone for collinearity is because collinearity is really a sign of the bigger experimental and statistical design flaw, confounding. 
+
+## Confounding
+
+Lets revisit the coefficents again to discuss confounding. First, confounding is NOT just collinearity, it is a matter of causation.  From Wikipedia, we see
+[Definition of Confounding](https://en.wikipedia.org/wiki/Confounding). 
+
+In statistics, a confounder (also confounding variable, confounding factor, or lurking variable) is a variable that influences both the dependent variable and independent variable causing a spurious association. Confounding is a causal concept, and as such, cannot be described in terms of correlations or associations
+
+The best available defense against the possibility of spurious results due to confounding is _experimental design_ . For example, through stratification of sampling effort, proper randomization of samples, large enough samples, etc. The goal of the principles of proper experimental design are to ensure that all potential confounding variables (known and unknown) will be distributed by chance across all study groups and hence will be uncorrelated with the binary variable for inclusion/exclusion in any group.
+
+```{r}
+summary(elev)$coefficients[,1:2]
+summary(disthhacc)$coefficients[,1:2]
+summary(elev.disthhacc)$coefficients[,1:2]
+```
+We note that the sign for Elevation is quite stable when alone and when in the presence of distance to high human access. Alone, it is -0.0055, together, it is -0.007.  This is a magnitude of change of about 27% from alone to when in a multiple logistic model.
+
+Conversely, the coefficient for distance varies dramatically from  -0.0002  when alone in a univariate model, to 0.00023 when in the presence of elevation.  This is a change of - 1.15, a complete sign flip in the opposite direction.  The coefficient for elevation is what I call a _stable_ coefficient. In contrast, the coefficient for distance is _unstable_ when in the presence of other covariates. This is a sign of both collinearity and confounding. 
+
+Hosmer and Lemeshow discuss guidelines for confounding in Medical Statistics. Their guidelines are to be alarmed by changes of coefficients that are > and absolute value of 20% when in the presence of multiple variables. This is an astonishingly stringent guideline for almost all regression analyses I have ever seen in ecology!  20% is a great target, but in practice, I have seen 50% and even sign flipping as the major criteria for ecological studies. The latter, especially, is problematic as in our case of elevation and distance. 
+
+With this background, lets continue to investigate and screen for multi-collinearity (many cases of correlations between 2 variables) in our wolfkde dataframe. Lets next test 2 other variables, elk and deer...
+```{r}
+## lets test 2 other variables, elk and deer...
+deer <- glm(used~deer_w2, data =wolfkde, family= binomial(logit))
+elk <-  glm(used~elk_w2, data =wolfkde, family= binomial(logit))
+
+# Next, fit both in our first multiple logistic regression model
+deer.elk <- glm(used~deer_w2 + elk_w2, data =wolfkde, family= binomial(logit))
+
+# now lets extract coefficients
+summary(deer)$coefficients[,1:2]
+summary(elk)$coefficients[,1:2]
+summary(deer.elk)$coefficients[,1:2]
+```
+
+Note this time the sign's didnt flip, but, they significantly changed, weakening in the presence of each other. The coefficient for deer was 1.17 alone, 0.74 together, a 36% change!  For elk, it was 1.12 alone, 0.633 together, representing a 44% change. Both are dramatic changes, suggestive of a correlation.    Which we confirm:
+```{r}
+cor.test(wolfkde$deer_w2, wolfkde$elk_w2)
+plot(wolfkde$deer_w2,wolfkde$elk_w2, type="p")
+abline(lm(elk_w2~deer_w2, data=wolfkde), col="red")
+```
+We confirm that the deer H.S.I. and elk H.S.I. scores are correlated with a $\rho$ = 0.86, representing essentially the exact same variable.  But doing these collinearity screens one at a time is very tedious.  In the next section we will advance to checking all covariates in a dataset at the same time. 
+
+
+#  Screening for Collinearity
+There are no firm guidelines for how to detect collinearity, and in today’s lab we will explore some of the following approaches;
+
+1)	Screening for collinearity by examining correlations and scatterplots between variables to identify potential confounded variables. Guidelines for excluding correlated variables are not firm, and range between r=0.3 to 0.7 (Prarie and Bird 1989, Hosmer and Lemeshow 2000,Menard 2002). This ‘range’ of guidelines is because what is most important to avoid is the problem identified in the next point.
+
+2)	Perhaps the most straightforward approach is to look for dramatic changes in the regression coefficients when a predictor variable is added or deleted. This is known as statistical confounding when two covariates are correlated strongly with each other to the point where you can’t separate out their effects on a dependent variable. 
+
+3)	Estimated regression coefficients have the opposite sign to that predicted based on univariate analyses.
+
+4)	Formal detection using variance inflation factors (VIF) based on the tolerance score – which is calculated defined as 1 / (1- R2j) where R2j is the multiple correlation coefficient. 
+
+## Continuous variables
+
+Lets continue plotting pairwise correlations one at a time. 
+```{r}
+plot(wolfkde$Elevation2 ,wolfkde$goat_w2, type="p")
+abline(lm(goat_w2~Elevation2, data=wolfkde), col="red")
+## graphically examining collinearity
+```
+
+## Scatterplot Matrices
+
+Next we will explore different ways of plotting multicollinearity using multiple variables at once. First, we will use the methods pairs() in the base package
+```{r}
+pairs(~Elevation2+DistFromHumanAccess2+DistFromHighHumanAccess2, data=wolfkde, main="Scatterplot Matrix")
+pairs(~deer_w2+moose_w2+elk_w2+sheep_w2+goat_w2+Elevation2, data=wolfkde, main="Scatterplot Matrix")
+```
+Here again we see the now familiar wedge shaped, triangular distribution that is indicative of our poor experimental design again with respect to the sampling of wolf territories across an elevation and distance from human gradient.  
+
+The prey model is a bit tougher to interpret because of the integer values of the prey HSI values. 
+
+### ScatterplotMatrix from Library car
+Next, we will use the scatterplotMatrix() function from the Car Library. This is a bit more graphically pleasing and overlays the linear model fit and 95% CI as well on continuous variables. 
+```{r, warning = FALSE}
+## using car library
+scatterplotMatrix(~deer_w2+moose_w2+elk_w2+sheep_w2+goat_w2+Elevation2, data=wolfkde, main="Scatterplot Matrix")
+
+scatterplotMatrix(~Elevation2+DistFromHumanAccess2+DistFromHighHumanAccess2, data=wolfkde, main="Scatterplot Matrix")
+
+scatterplotMatrix(~deer_w2+moose_w2+elk_w2+sheep_w2+goat_w2+Elevation2+DistFromHumanAccess2+DistFromHighHumanAccess2, data=wolfkde, main="Scatterplot Matrix")
+```
+
+### Using Library corrgram
+This makes a scatterplot matrix with the upper panel defined as the Pearsons correlation coefficient expressed in Pie graph form (where r = 1.0), red = negative correlation and blue equals a positive correlation. Similarly, the bottom panel displays the strength of the correlation in shaded color. 
+
+In the next two plots I vary the options for the upper and lower panel to variously display the data and linear fit on the bottom panel, and, the 95% ellipse of the correlation coefficient in the bottom. 
+
+Find out more here: 
+```
+?corrgram()
+```
+```{r}
+corrgram(wolfkde[1:9], order=TRUE, lower.panel=panel.shade,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Correlations in the Wolf Data")
+
+corrgram(wolfkde[1:9], order=TRUE, lower.panel=panel.pts,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Correlations in the Wolf Data")
+
+corrgram(wolfkde[1:9], order=TRUE, lower.panel=panel.ellipse,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Correlations in the Wolf Data")
+```
+
+### ggcorr
+Note there are a billion ways to explore scatter plot matrices
+https://www.r-bloggers.com/multiple-regression-lines-in-ggpairs/
+
+and in R Graphics Cookbook   Section 5.13. 
+
+```{r ggplots, warnings = FALSE}
+## using the ggcorr package
+ggcorrplot <- ggcorr(wolfkde[1:9], label = TRUE)
+ggcorrplot
+## GGally package with ggpairs()
+ggpairplot<-ggpairs(wolfkde[1:9])
+ggpairplot
+```
+
+### Multicollinearity Function
+Here is a simple function for calculating correlations and probabilities, 
+https://stat.ethz.ch/pipermail/r-help/2001-November/016201.html
+Correlations appear below the diagonal and significance probabilities above the diagonal 
+```{r}
+cor.prob <- function(X, dfr = nrow(X) - 2) {
+  R <- cor(X, use="complete.obs")
+  above <- row(R) < col(R)
+  r2 <- R[above]^2
+  Fstat <- r2 * dfr / (1 - r2)
+  R[above] <- 1 - pf(Fstat, 1, dfr)
+  R
+}
+
+cor.prob(as.matrix(wolfkde[,c("deer_w2","elk_w2", "moose_w2", "sheep_w2", "goat_w2", "Elevation2", "DistFromHumanAccess2", "DistFromHighHumanAccess2")]))
+```
+
+Next, lets modify the function to add *'s for P=0.05 significant correlations try this
+```{r}
+cor.prob2 <- function(X, dfr = nrow(X) - 2) {
+  R <- cor(X, use="complete.obs")
+  above <- row(R) < col(R)
+  r2 <- R[above]^2
+  Fstat <- r2 * dfr / (1 - r2)
+  R[above] <- 1 - pf(Fstat, 1, dfr)
+  Rstar = ifelse(R[above]<0.05, "***", "NS")
+  R[above]=paste(R[above],Rstar)
+  R
+}
+
+cor.prob2(as.matrix(wolfkde[,c("deer_w2","elk_w2", "moose_w2", "sheep_w2", "goat_w2", "Elevation2", "DistFromHumanAccess2", "DistFromHighHumanAccess2")]))
+```
+
+
+So which covariates have the highest correlations??  Deer, Elk, and Moose all have correlation coefficients > 0.65; Sheep and Goats are correlated > 0.4; elevation is inversely correlated with an R of -0.75 with deer, elk , moose
+
+### Variance Inflation FActors
+
+NExt we will learn about how to screen for multicollinearity using Variance Inflation Factors. The problem with including say, deer and elk in the same model is that they are so highly correlated that 
+
+One definition for VIF is the variance inflation factor (VIF) is the ratio of variance in a multiple linear model , divided by the variance of a model with one term alone (univariate model).  It provides an index that measures how much the variance (the square of the estimate's standard deviation) of an estimated regression coefficient is increased because of collinearity.
+
+[Wikipedia on Variance Inflation Factors](https://en.wikipedia.org/wiki/Variance_inflation_factor)
+
+A tolerance of less than 0.1, or a VIF > 10 indicates a multicollinearity problem in simple linear regression. If Rj equals zero (i.e., no correlation between Xj and the remaining independent variables), then VIFj equals 1. This is the minimum value. Neter et al. (1996) and ( McCullough and Nelder 1989) recommend looking at the largest VIF value. A value greater than 10 is an indication of potential multi-collinearity problems. As a rough guideline, values between 1 and 2 are not a major problem, but values approaching 10 should cause concern.
+
+Learn more about vif's in R. 
+```
+?vif()
+```
+
+The square root of the variance inflation factor indicates how much larger the variance is, compared with what it would be if that variable were uncorrelated with the other predictor variables in the model. If the variance inflation factor of a predictor variable were 5.27 (√5.27 = 2.3) this means that the standard deviation for the coefficient of that predictor variable is 2.3 times as large as it would be if that predictor variable were uncorrelated with the other predictor variables. The definition of ‘high’ is somewhat arbitrary but values in the range of 5-10 are commonly used. So in this case, we are really concerned with Elevation. 
+
+```{r}
+full.model = glm(used~deer_w2 + elk_w2 +moose_w2 +sheep_w2+goat_w2+Elevation2+DistFromHumanAccess2+DistFromHighHumanAccess2, data =wolfkde, family= binomial(logit))
+summary(full.model)
+
+vif(full.model)
+```
+Here we see that elevation has the highest VIF of ~ 3.7. While below the arbitrary threshold of 5, remember all this  measures is collinearity, NOT confounding.  But in the final model, sheep nor deer are significant any more, but they probably shouldnt have been in the model in the first place
+
+
+## Categorical variables
+So far, we have considered collinearity of only continuous variables. Categorical variables can also be collinear, and, often, confounded with continuous variables. Next, we will asses collinearity of continuous and categorical variables
+```{r}
+cor.test(wolfkde$alpine, wolfkde$Elevation2)
+cor.test(wolfkde$burn, wolfkde$Elevation2)
+cor.test(wolfkde$closedConif, wolfkde$Elevation2)
+cor.test(wolfkde$herb, wolfkde$Elevation2)
+cor.test(wolfkde$goat_w2, wolfkde$Elevation2)
+```
+This confirms, rather unsurprisingly, that we probably shouldnt consider goat and elevation in the same model.
+
+Lets do all variables, continuous and categorical together. 
+```{r}
+cor.prob(as.matrix(wolfkde[,c("Elevation2", "DistFromHumanAccess2", "openConif", "closedConif", "modConif", "burn", "herb", "decid", "burn", "alpine")]))
+```
+Lots to digest here, but we screen for big numbers and see that there are a few areas to be concerned with between our 2 continuous covaraites and some of the landcover categories.  
+
+Lets plot the correlations between Elevation [7] and landcover types [18:29]
+```{r}
+corrgram(wolfkde[c(7, 18:29)], order=TRUE, lower.panel=panel.fill,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Landcover Correlations with Elevation")
+## so nothing too egregious 
+
+## next human access[8]
+corrgram(wolfkde[c(8, 18:29)], order=TRUE, lower.panel=panel.cor,
+         upper.panel=panel.pie, text.panel=panel.txt,
+         main="Landcover Correlations with Distance from Human Access")
+
+## again, only issue is Rock and Ice but even then its not a huge effect. 
+
+## we can essentially see this here: 
+boxplot(Elevation2~landcov.f, ylab="Elevation (m)", data=wolfkde, las=3)
+boxplot(DistFromHumanAccess2~landcov.f, ylab="Elevation (m)", data=wolfkde, las=3)
+```
+So collinearity is not as important for categorical variables but it becomes important if we start to assess cagetorical interactions with continuous factors. 
+
+
+## Interaction Between Categorical Factors and Continuous
+Here we will focus on the relationship between whether wolves are responding to human use differently in open and closed cover types.
+```{r, warning = FALSE}
+wolfkde$closed = 0
+wolfkde$closed <- wolfkde$closedConif + wolfkde$modConif + wolfkde$openConif + wolfkde$decid + wolfkde$mixed + wolfkde$burn
+## note I considered burn here as 'closed' - could change. 
+
+wolfkde$closedFactor <-as.factor(wolfkde$closed)
+
+ggplot(wolfkde, aes(x=DistFromHighHumanAccess2, y=used, fill=closedFactor)) + stat_smooth(method="glm", method.args = list(family="binomial"), level=0.95) #+ facet_grid(closed~.)
+```
+This shows the effect of distance from high human access varies a lot with whether wolves are in closed cover or not. But does there look to be an interaction? I.e., does the effect of X here on Y vary across levels of the categorical factor? Not really.  Lets look at a box plot. 
+
+```{r}
+boxplot(DistFromHighHumanAccess2~closed, ylab="Distance from High Human (m)", data=wolfkde)
+cor.test(wolfkde$closed, wolfkde$DistFromHighHumanAccess2)
+cor.test(wolfkde$closed, wolfkde$Elevation2)
+```
+So yes, you can only get far away from humans evidently in open landcover types (rock / ice) but this isnt that big a problem, based on the correlation coefficient of $\rho$= -0.35. 
+
+However, note that for Rock and Ice and Elevation, the correlation is much more severe, $\rho$= -0.65. However, recall that here we are really mainly concerned where we might want to consider an INTERACTION between the effects of a categorical variable and a continuous variable - IF there is a very strong correlation, then again, from an experimental design view point we cannot separate out effects of elevation or the closed factor variable (in our example).  
+
+But, here, looking at the stat_smoother tells us that despite the probability of wolf use being lower in closed forests, its a completely additive effect. 
+```{r}
+ggplot(wolfkde, aes(x=Elevation2, y=used, fill=closedFactor)) + stat_smooth(method="glm", method.args = list(family="binomial"), level=0.95) 
+```
+
+In our final step, lets fit the model now
+```{r}
+disthha.cover <-  glm(used~closed + DistFromHighHumanAccess2 + closed*DistFromHighHumanAccess2, data =wolfkde, family= binomial(logit))
+summary(disthha.cover)
+boxplot(DistFromHighHumanAccess2~closedFactor, ylab="Distance From High Human Access (m)", data=wolfkde)
+```
+
+So yes, you can only get far away from humans evidently in open landcover types (rock / ice) but this isnt that big a problem. 
+
+Lets try again with distance to human access
+```{r}
+ggplot(wolfkde, aes(x=DistFromHumanAccess2, y=used, fill=closedFactor)) + stat_smooth(method="glm", method.args = list(family="binomial"), level=0.95) #+ facet_grid(closed~.)
+```
+Note, there is a bit stronger evidence of an interaction here (the lines cross)
+```{r}
+boxplot(DistFromHumanAccess2~closedFactor, ylab="Distance From High Human Access (m)", data=wolfkde)
+distha.cover <-  glm(used~closed + DistFromHumanAccess2 + closed*DistFromHumanAccess2, data =wolfkde, family= binomial(logit))
+summary(distha.cover)
+```
+
+# Model Building and Model Selection
+
+Armed with our knowledge of which variables are too collinear to include in the model, and the concerns we have that some of our continuous variables are confounded - experimentally - the next question is how do we proceed to build multiple logistic regression models with more than one variable?
+
+This is the most common problem in the development of advanced statisical models. How best to proceed? For example, based on our preliminary exploration and screening for collinearity above, we should not really consider models with moose, deer and elk together. Moreover, we should not consider models with distance to high human use and elevation together. 
+
+This is the age old problem of Model Building and Model Selection in statistics.  An excellent book along with Hosmer and Lemeshow here that guide my philosophy of model selection is Frank Harrel's Regression Modeling Strategies. This really is a fantasti book. 
+
+Harrell, F.E. (2001) Regression modeling strategies: with applications to linear models, logistic regression and survival analysis, Springer-Verlag, New York, NY.
+
+## Cleaning Up Missing Data
+But first we have to clean up msising data for all model selection steps, as missing data that are unbalanced between covariates will result in different degrees of freedom, or, certainty, between models. And models with different degrees of freedom or rows of data cannot be compared directly.  For example, in our dataset we have different NA's in elevation and other variables. 
+```{r}
+length(wolfkde$Elevation2)
+wolfkde2 <- na.omit(wolfkde)
+length(wolfkde2$Elevation2)
+```
+Note there were 252 NA's for some covariates.  Check that there are no other NA's in any of the other fields (on your own for homework).
+
+
+# Akaike Information Critera
+
+Akaike Information Criteria (AIC) was conceived on a Tokyo Commuter train by Hirotugo Akaike, a Japanese statistician, based on the concept of Information Theory which was itself based on the concept of Entropy.  
+
+![Hirotugo Akaiki](/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab5/Akaike.jpg)
+Briefly, AIC is a statistical measure of the relative quality of statistical models for a given set of data (why we have to clean up missing NA's above). Thus, AIC is a useful measure to compare models and find out which model contains the most information in a particular set of data.  AIC fundamentally minimizes the trade-off between the goodness of fit of a model, and the simplicity of a model.  Put another way, it balances between the risks of overfitting and underfitting. 
+
+For a given statistical model and a set of data, we have _k_ number of parameters, and, the Likelihood _L_ of the data, given the model. In the case of Likelihood, then, we have the formula for AIC as
+
+$$ AIC = 2k - 2ln(L) $$ 
+For a given set of data, the 'best' model is the one that minimizes the AIC, that is, the model with the minimum AIC is the best model. The first term, 2k, penalizes overfitting because fit always increases with increasing number of parameters. See our exercise above. The second term rewards (again, in the inverse sense) models with the most information as assessed by the highest likelihood.  Combined, these two terms trade-off and the model with the best ability to explain the data with the fewest number of parameters 'wins'. 
+
+We will dive right in here in Lab, but, I direct you to the following key papers for background for Wildlife Biologists
+
+* References
+
+  + Burnham, K.P. & Anderson, D.R. (eds.) (1998) Model selection and inference: a practical information-theoretic approach, Springer-Verlag, New York.
+
+  + Anderson, D.R. & Burnham, K. (2002) Avoiding pitfalls when using information-theoretic approaches. Journal of Wildlife Management, 66, 912-916.
+
+  + Anderson, D.R., Link, W.A., Johnson, D.H. & Burnham, K.P. (2001) Suggestions for presenting the results of data analyses. Journal of Wildlife Management, 65, 373-378.
+
+# Manual Model Selection Using AIC
+
+With this brief review of AIC, we will look at the models we have already fit above. After we have fit ANY model in the str() we can see that there is AIC information stored in the model object. 
+```{r}
+cover <-  glm(used~closed, data =wolfkde2, family= binomial(logit))
+## Estimating AIC manually
+
+logLik(cover) ## this is the log likelihood
+2*(length(cover$coefficients)) ## this is the number of parameters
+
+## But note that we can calcualte AIC manually using -2* LL + 2*K where LL is logLik and K is # of parameters (without considering the small sample size correction)
+-2*as.numeric(logLik(cover))+2*(length(cover$coefficients))
+## Note we don't have to do this all manually, in the model str(cover) we see
+#str(cover)
+cover$aic
+
+## Lets use using AIC to select interactions...
+distha <-  glm(used~DistFromHumanAccess2, data =wolfkde2, family= binomial(logit))
+distha.cover <-  glm(used~closed + DistFromHumanAccess2, data =wolfkde2, family= binomial(logit)) ## Main effects only
+
+disthaXcover <-  glm(used~closed + DistFromHumanAccess2 + closed*DistFromHumanAccess2, data =wolfkde2, family= binomial(logit))
+      
+AIC(cover, distha, distha.cover, disthaXcover)
+```
+So, here, AIC is telling us that the model with the minimum AIC = 1622, disthaXcover, is the 'best'. Note that it is over 30 AIC units 'smaller', and better, than the next 'closest' model - the model with the main additive effects of distance and cover. We will discuss delta AIC below. Hence, here, we have reasonably STRONG evidence that model disthhaXcover is much better than disthhaXcover
+
+Lets redo with distance to high human access
+```{r}
+disthha <-  glm(used~DistFromHighHumanAccess2, data =wolfkde2, family= binomial(logit))
+disthha.cover <-  glm(used~closed + DistFromHighHumanAccess2, data =wolfkde2, family= binomial(logit)) ## Main effects only
+disthhaXcover <-  glm(used~closed + DistFromHighHumanAccess2 + closed*DistFromHighHumanAccess2, data =wolfkde2, family= binomial(logit))
+      
+AIC(cover, disthha, disthha.cover, disthhaXcover)
+```
+Again, , here there is STRONG evidence that model disthhaXcover is much better than the model with the main effects. 
+
+However, this is tedious, and, how do we know the best models to compare? This brings us to... 
+
+## Stepwise Model Selection
+
+Over the history of statistics, there have been dozens of approaches. First, we will start with Stepwise Model Selection using AIC in the package stepAIC. 
+
+```{r}
+# Lets review the full.model again
+full.model = glm(used~deer_w2 + elk_w2 +moose_w2 +sheep_w2+goat_w2+Elevation2+DistFromHumanAccess2+DistFromHighHumanAccess2 +closed + closed*DistFromHighHumanAccess2, data =wolfkde2, family= binomial(logit))
+```
+
+Note here that I suppressed the output of this next command 
+```{r}
+## Backwards selection
+stepAIC(full.model, direction = "backward")
+
+top.backwards = glm(used ~ deer_w2 + elk_w2 + moose_w2 + sheep_w2 + goat_w2 + Elevation2 + DistFromHumanAccess2 + DistFromHighHumanAccess2, data=wolfkde2,family=binomial(logit))
+summary(top.backwards)
+```
+
+Next, lets do Forward Stepwise model selection 
+```{r, include=FALSE}
+# Forwards selection - First define a NULL model as the starting place
+null.model = glm(used~1,data=wolfkde2,family=binomial(logit))
+### This time with output from stepAIC supressed 
+stepAIC(null.model, scope=list(upper=full.model, lower= null.model),direction="forward")
+## lots of output supressed in Rmarkdown
+top.forward <- glm(used ~ Elevation2 + DistFromHighHumanAccess2 + 
+    moose_w2 + elk_w2 + goat_w2 + DistFromHumanAccess2 + sheep_w2 + 
+    deer_w2 + closed, family = binomial(logit), data = wolfkde2)
+summary(top.forward)
+```
+Very similar - identical - to the backwards top model.  Right ! we are done??? are we? Lets screen for collinearity. 
+
+```{r}
+vif(top.forward)
+#vif(top.backwards)
+```
+
+But there are a bunch of collinear variables in the model, moose/elk/deer, human/human/human. Basically everything is being retained, not much kicked out. 
+*This is our first experience that you can throw garbage into a model selection algorithm and get garbage out. *
+
+Now what about landcover (with rock Ice as the intercept)??
+```{r}
+full.model.landcov = glm(used~ closedConif +modConif+openConif+decid+regen+mixed+herb+shrub+water+burn+alpine, data =wolfkde2, family= binomial(logit))
+stepAIC(full.model.landcov, direction = "backward")
+
+top.model.landcov = glm(used~openConif+modConif+closedConif+mixed+herb+shrub+water+burn, data =wolfkde2, family= binomial(logit))
+summary(top.model.landcov)
+vif(top.model.landcov)
+
+```
+Despite the evidence for potential collinearity amongst our categorical variables, even though its harder to discren, lets use this combination of Landcover covariates next as the BEST top model later.
+
+Overall, this exercise in stepwise model selection leaves me feeling disatisfied. There has to be a better way. 
+
+#  Model selection using the AICcmodavg package
+Ok - we are going to take 2 competing sets of models; Model 1 set - JUST biotic covariates, prey species and humans. Second, in Model 2 set - JUST environmental covariate models such as elevation, landcover models, etc.  The challenge for us as a class is to develop a set of models a-priori that represent biological hypotheses, and, ideally, avoid confounded or collinear variables we now know about. 
+
+To illustrate this, we will work through a class excercise on the board in the lab. And then we will FIT CANDIDATE MODELS with the AICcmodavg package. 
+
+## Biotic Model List
+
+Model set 1: Biotic interactions, deer/elk/moose all too correlated to put in the same model, sheep and goat are OK. 
+```{r}
+m.biotic <- list()
+head(m.biotic)
+
+#lets fit our a-priori list of models 
+## Model set 1: Biotic
+m.biotic[[1]] <- glm(used ~ 1, family=binomial(logit), data=wolfkde2)
+m.biotic[[2]] <- glm(used ~ elk_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[3]] <- glm(used ~ deer_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[4]] <- glm(used ~ moose_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[5]] <- glm(used ~ sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[6]] <- glm(used ~ goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[7]] <- glm(used ~ moose_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[8]] <- glm(used ~ deer_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[9]] <- glm(used ~ elk_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[10]] <- glm(used ~ elk_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[11]] <- glm(used ~ deer_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[12]] <- glm(used ~ moose_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[13]] <- glm(used ~ sheep_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[14]] <- glm(used ~ DistFromHighHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.biotic[[15]] <- glm(used ~ DistFromHighHumanAccess2+deer_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[16]] <- glm(used ~ DistFromHighHumanAccess2+moose_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[17]] <- glm(used ~ DistFromHighHumanAccess2+sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[18]] <- glm(used ~ DistFromHighHumanAccess2+goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[19]] <- glm(used ~ DistFromHighHumanAccess2+moose_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[20]] <- glm(used ~ DistFromHighHumanAccess2+deer_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[21]] <- glm(used ~ DistFromHighHumanAccess2+elk_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[22]] <- glm(used ~ DistFromHighHumanAccess2+elk_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[23]] <- glm(used ~ DistFromHighHumanAccess2+deer_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[24]] <- glm(used ~ DistFromHighHumanAccess2+moose_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[25]] <- glm(used ~ DistFromHighHumanAccess2+sheep_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[26]] <- glm(used ~ DistFromHighHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.biotic[[27]] <- glm(used ~ DistFromHighHumanAccess2+deer_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[28]] <- glm(used ~ DistFromHighHumanAccess2+moose_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[29]] <- glm(used ~ DistFromHighHumanAccess2+sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[30]] <- glm(used ~ DistFromHighHumanAccess2+goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[31]] <- glm(used ~ DistFromHighHumanAccess2+moose_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[32]] <- glm(used ~ DistFromHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.biotic[[33]] <- glm(used ~ DistFromHumanAccess2+deer_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[34]] <- glm(used ~ DistFromHumanAccess2+moose_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[35]] <- glm(used ~ DistFromHumanAccess2+sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[36]] <- glm(used ~ DistFromHumanAccess2+goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[37]] <- glm(used ~ DistFromHumanAccess2+moose_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[38]] <- glm(used ~ DistFromHumanAccess2+deer_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[39]] <- glm(used ~ DistFromHumanAccess2+elk_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[40]] <- glm(used ~ DistFromHumanAccess2+elk_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[41]] <- glm(used ~ DistFromHumanAccess2+deer_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[42]] <- glm(used ~ DistFromHumanAccess2+moose_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[43]] <- glm(used ~ DistFromHumanAccess2+sheep_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[44]] <- glm(used ~ DistFromHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.biotic[[45]] <- glm(used ~ DistFromHumanAccess2+deer_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[46]] <- glm(used ~ DistFromHumanAccess2+moose_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[47]] <- glm(used ~ DistFromHumanAccess2+sheep_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[48]] <- glm(used ~ DistFromHumanAccess2+goat_w2, family=binomial(logit), data=wolfkde2)
+m.biotic[[49]] <- glm(used ~ DistFromHumanAccess2+moose_w2 + sheep_w2, family=binomial(logit), data=wolfkde2)
+                   
+
+## then name our models .
+## note you can name your models with a command like this
+# model.names <-  ("null", "disthha", "distacc", "sheepwi", "goatwin", "elkwint", "moosewin", "deerwin") but in this case there were 49 models
+model.names.biotic <-c("m0","m1","m2","m3","m4","m5","m6","m7","m8","m9","m10","m11","m12","m13","m14","m15","m16","m17","m18","m19","m20","m21","m22","m23","m24","m25","m26","m27","m28","m29","m30","m31","m32","m33","m34","m35","m36","m37","m38","m39","m40","m41","m42","m43","m44", "m45","m46","m47","m48")
+model.names.biotic <-1:49
+
+aictab(cand.set = m.biotic, modnames = model.names.biotic)
+
+## OK so the top model was model 41
+
+top.biotic <- glm(used ~ DistFromHumanAccess2+deer_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+summary(top.biotic)
+vif(top.biotic)
+## so - not too badly collinear. 
+
+
+## and the 2nd ranked top biotic model was  model 40
+second.biotic <- glm(used ~ DistFromHumanAccess2+elk_w2 + goat_w2, family=binomial(logit), data=wolfkde2)
+summary(second.biotic)
+vif(second.biotic)
+```
+
+## Model set 2: Environmental Covariates Only
+```{r}
+m.env <- list()
+head(m.env)
+
+## Model set 1: Biotic
+m.env[[1]] <- glm(used ~ 1, family=binomial(logit), data=wolfkde2)
+m.env[[2]] <- glm(used ~ Elevation2, family=binomial(logit), data=wolfkde2)
+m.env[[3]] <- glm(used ~ DistFromHighHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.env[[4]] <- glm(used ~ DistFromHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.env[[5]] <- glm(used ~ openConif+modConif+closedConif+mixed+herb+shrub+water+burn, family=binomial(logit), data=wolfkde2)
+m.env[[6]] <- glm(used ~ Elevation2 + DistFromHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.env[[7]] <- glm(used ~ DistFromHighHumanAccess2 + openConif+modConif+closedConif+mixed+herb+shrub+water+burn, family=binomial(logit), data=wolfkde2)
+m.env[[8]] <- glm(used ~ DistFromHumanAccess2 + openConif+modConif+closedConif+mixed+herb+shrub+water+burn, family=binomial(logit), data=wolfkde2)
+m.env[[9]] <- glm(used ~ Elevation2 + openConif+modConif+closedConif+mixed+herb+shrub+water+burn, family=binomial(logit), data=wolfkde2)
+m.env[[10]] <- glm(used ~ Elevation2 + DistFromHumanAccess2 + openConif+modConif+closedConif+mixed+herb+shrub+water+burn, family=binomial(logit), data=wolfkde2)
+m.env[[11]] <- glm(used ~ Elevation2 + DistFromHighHumanAccess2 + openConif+modConif+closedConif+mixed+herb+shrub+water+burn, family=binomial(logit), data=wolfkde2)
+m.env[[12]] <- glm(used ~ Elevation2 + DistFromHighHumanAccess2 + closed + closed*DistFromHighHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.env[[13]] <- glm(used ~ Elevation2 + DistFromHumanAccess2 + closed + closed*DistFromHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.env[[14]] <- glm(used ~ DistFromHighHumanAccess2 + closed + closed*DistFromHighHumanAccess2, family=binomial(logit), data=wolfkde2)
+m.env[[15]] <- glm(used ~ DistFromHumanAccess2 + closed + closed*DistFromHumanAccess2, family=binomial(logit), data=wolfkde2)
+
+
+model.names.env <-1:15
+
+aictab(cand.set = m.env, modnames = model.names.env)
+
+#OK - top model is model 11
+top.env <- glm(used ~ Elevation2 + DistFromHighHumanAccess2 + openConif+modConif+closedConif+mixed+herb+shrub+water+burn, family=binomial(logit), data=wolfkde2)
+summary(top.env)
+vif(top.env)
+```
+
+Now - which 'set' of covariates is best? Env? or Biotic?
+
+```{r}
+AIC(top.env, top.biotic)
+
+## Environmental model HANDS DOWN. 
+
+## now go back and compare 'top' model to top model selected by AIC
+
+AIC(top.forward, top.biotic, second.biotic, top.env)
+```
+
+This reveals that all model selection methods, especialyl stepwise, will overfit models and does not penalize for collinearity.  This is a crucial lesson from today. *Model selection methods will not screen out collinear variables for you!*
+
+
+# Model Selection using the MuMIn Package
+
+Also explore the use of package MuMIn - Mutlimodel inference
+http://cran.r-project.org/web/packages/MuMIn/MuMIn.pdf
+
+In today's lab, we never really had to deal with much model selection uncertainty, but, model selection approaches can readily be used to make what is called Multi-model inference across a top set of candidate models. 
+
+```{r}
+# re-run FULL logistic regression model
+top.forward = glm(used ~ deer_w2 + elk_w2 + moose_w2 + sheep_w2 + goat_w2 + Elevation2 + DistFromHumanAccess2 + DistFromHighHumanAccess2 + closed + DistFromHighHumanAccess2*closed, data=wolfkde2,family=binomial(logit), na.action ="na.fail")
+summary(top.forward)
+
+#install and load MuMIn package
+require(MuMIn)
+
+#use dredge function to get all possible models
+x1<-dredge(top.forward)
+
+## x1 - looking at all 
+## there are over 1000 models fit! 10! models = ? models
+## note dredge has fit XX models in total out of this candidate set of 19 candidate variables
+
+head(x1, n = 10) ## only shows top 10 models fit
+plot(x1)
+x2<- subset(x1, delta < 2)
+plot(x2)
+```
+What this plot shows is the variables, their comparative model rank, and variable importance. 
+
+Lets subset to only look at the top models with dAIC < 2. 
+```{r}
+#get top models with AICc <2
+top.models<-get.models(x1, subset=delta<2)
+#top.models
+
+#model average covariate effects
+x6<-model.avg(top.models)
+summary(x6)
+
+## next lets do landcover 
+top.dredge.lc = glm(used ~ openConif+modConif+closedConif+mixed+herb+shrub+water+burn+decid+regen+alpine, data=wolfkde2,family=binomial(logit), na.action ="na.fail")
+x2<-dredge(top.dredge.lc)
+head(x2, n=10)
+plot(x2)
+```
+
+## Manipulating Coefficients from Dredge
+
+Now, it's up to you what you want from your model.  If you just want coefficients, for example, here they are for model 1 from the :
+
+```{r}
+coefficients(top.models[[1]])
+```
+To get them from all the models, you need to make friends with the `lapply` and `sapply` functions, or, the `ldply()` from `plyr`.  For example:
+
+```{r}
+top.model.coef <- lapply(top.models, coefficients)
+str(top.model.coef)
+```
+
+But this is a horrendous list. You can collapse those into a single data frame by doing something like this with `ldply`:
+```{r}
+#require(plyr)
+ldply(top.models, function(l) as.data.frame(t(coefficients(l))))
+```
+
+Which is pretty tidy.  If you want, for example, p-values, you need to dig into the fitted model object a bit.  Here is the stats table for the top model:
+
+```{r}
+summary(top.models[[1]])$coefficients
+```
+
+So you need to pull out the p-values inside of your ldply command:
+
+```{r}
+tidyList1<- ldply(top.models, function(l) as.data.frame(t(summary(l)$coefficients[,4])))
+head(tidyList1)
+```
+There are your p-values.  
+
+Next we will use the `broom` package, which has a `tidy` command which might automate everything for you.  Check this out:
+
+```{r}
+require(broom)
+tidy(top.models[[1]])
+tidyList2 <- ldply(top.models, tidy)
+head(tidyList2)
+```
+
+That extracts the main information you might need. 
+
+What you actually want is confidence intervals.  You can get those out of the `tidy` output with a little piping (wiht magrittr)
+
+```{r}
+require(magrittr)
+(CI.table <- ldply(top.models, tidy) %>%  mutate(CI.low = estimate - 2*std.error, CI.high = estimate + 2*std.error))
+```
+
+This thing you can quickly ggplot, which is nice:
+
+```{r}
+ggplot(mutate(CI.table, model = .id), aes(model, estimate)) + 
+  geom_errorbar(aes(ymin = CI.low, ymax = CI.high)) + 
+  facet_wrap(.~term, scales = "free_y") + theme(axis.text.x = element_text(angle = 90))
+```
+
+
+#  Model Selection using BIC
+
+Note we will use the function BIC() in the base {stats4} pacakge. This generic function calculates the Bayesian information criterion, also known as Schwarz's Bayesian criterion (SBC), for one or several fitted model objects for which a log-likelihood value can be obtained, according to the formula 
+$$BIC = -2*log-likelihood + npar*log(nobs)$$, 
+where npar represents the number of parameters and nobs the number of observations in the fitted model.
+
+In my estimation, BIC tends to be more conservative in preventing model overfitting because it does not consider K the 'penalty' function, but instead, considers K*log(n) where n is the number of rows of data, as the penalty function. Thus, it calculates a bigger penalty for larger datasets, which gaurds against overfitting. 
+
+Note: There are not as many functions out there to calculate model selection using BIC. Today we will use BIC in the package MuMIn. 
+
+References
+
+Aho, K., Derryberry, D. & Peterson, T. (2014) Model selection for ecologists: the worldviews of AIC and BIC. Ecology, 95, 631-636.
+
+Lets next explore extracting BIC manually and comparing model fit between AIC and BIC. 
+```{r}
+## First manually
+AIC(top.forward, top.biotic, second.biotic, top.env)
+BIC(top.forward, top.biotic, second.biotic, top.env)
+## OK - so not much difference in top models using BIC and AIC in this dataset
+```
+
+
+## BIC with Dredge
+Now lets use the dredge function with BIC
+```{r}
+x1.bic<-dredge(top.forward, rank=BIC) ## note this now ranks using BIC
+plot(x1.bic)
+
+## x1.bic - look at all 
+
+head(x1.bic, n = 10) ## only shows top 10 models fit
+# lets compare the top model from AIC and BIC
+head(x1.bic, n = 1) ## only shows top 1 models fit with BIC
+head(x1, n = 1) ## only shows top 1 models fit with AIC
+```
+
+So AIC is overfitting here potentially, selecting a model with 11 parameters versus 7 parameters with BIC. Take note.  This is a theme. 
+
+Next, lets take a look at the top models. 
+```{r}
+#get top models with BIC <2
+top.models.bic<-get.models(x1.bic, subset=delta<2)
+top.models.bic 
+```
+Note there is only 1 top model here using BIC, thus, there is no need to model average covariate effects using this command. 
+```
+x.top.bic<-model.avg(top.models.bic) ## only 1 top model, so this doesnt work
+```
+Lets run the 'top' model selected using BIC for next week. 
+```{r}
+## Lets run the 'top' model selected using BIC for next week
+top.model.bic = glm(used ~ DistFromHighHumanAccess2 + DistFromHumanAccess2+Elevation2+elk_w2+goat_w2+moose_w2, data=wolfkde2,family=binomial(logit), na.action ="na.fail")
+summary(top.model.bic)
+## compare to top AIC model
+summary(top.forward)
+```
+
+# Variable reduction using PCA - Principle Components Analysis
+
+Note princomp is a base function of {stats4}.  Here, we suffered through the problem of multicollinearity, and had to reduce the number of covariates we could possibly consider in the same top model as a results. Accordingly, really, we shouldn't really have elevation and distance to high human access in the same model, ever. 
+
+Another way around the problem of multicollinearity is through multivariate statistical approaches, which are NOT to be confused with multiple logistic regression, etc. 
+
+From [Wikipedia](https://en.wikipedia.org/wiki/Principal_component_analysis)
+
+In multivariate approaches such as Principle Components Analysis, Principal component analysis (PCA) is a statistical procedure that uses an orthogonal transformation to convert a set of observations of possibly correlated variables (entities each of which takes on various numerical values) into a set of values of linearly uncorrelated variables called principal components. If there are 
+n observations with p variables, then the number of distinct principal components is
+$\displaystyle \min(n-1,p)$. This transformation is defined in such a way that the first principal component has the largest possible variance (that is, accounts for as much of the variability in the data as possible), and each succeeding component in turn has the highest variance possible under the constraint that it is orthogonal to the preceding components. The resulting vectors (each being a linear combination of the variables and containing n observations) are an uncorrelated orthogonal basis set. PCA is sensitive to the relative scaling of the original variables.
+
+HEre, we will use PCA to attempt to reduce the number of variables we are considering to the minimum number of orthogonal, truly independent vectors and then use these in our GLM. 
+```{r}
+head(wolfkde2)
+pcawolf <-princomp(na.omit(wolfkde2[1:9]), cor=TRUE)
+summary(pcawolf)
+loadings(pcawolf)
+plot(pcawolf, type="lines")
+biplot(pcawolf, xlim =c(-0.06, 0.04))
+```
+
+OK - so this tells us that component 1 explains most of the variation here, and, is explained mostly by an axis that is a positive linear combination of being at low elevations, close to humans, in good deer habitat, etc.   Lets make a new component based on this orthoganal contrast:
+```{r}
+wolfkde2$Comp.1 <- -0.406*wolfkde2$deer_w2 - 0.370*wolfkde2$moose_w2 - 0.402*wolfkde2$elk_w2 +0.182*wolfkde2$goat_w2 - 0.415*wolfkde2$wolf_w2 + 0.408*wolfkde2$Elevation2 + 0.318*wolfkde2$DistFromHumanAccess2 + 0.233*wolfkde2$DistFromHighHumanAccess2
+
+wolf_comp1 <- glm(used ~ Comp.1, family=binomial (logit), data=wolfkde2)
+wolfkde2$fitted1 <- fitted(wolf_comp1)
+hist(wolfkde2$fitted1)
+plot(wolfkde2$fitted1, wolfkde2$Comp.1)
+
+figPCA <- ggplot(wolfkde2, aes(x=Comp.1, y=used)) + stat_smooth(method="glm", method.args = list(family="binomial"))
+x.axis = "-0.41*deer - 0.37*moose - 0.4*elk +0.18*goat - 0.42*wolf + 0.41*Elev + 0.32*DistHum + 0.23*DistHighHum"
+figPCA2 <- figPCA + xlab(x.axis)
+figPCA2
+```
+The label on the Axis now explains the problem with PCA and why its such a bugbear. How do you explain component 1 to a manager?
+
+# Caterpillar plots of coefficients
+```{r}
+require(ggplot2)
+
+# run logistic regression model
+summary(full.model)
+
+B<-summary(full.model)$coefficient[1:length(summary(full.model)$coefficient[,1]),1]
+#create margin of error (ME) for 95% CI
+ME <- summary(full.model)$coefficient[1:length(summary(full.model)$coefficient[,1]),2]*1.96
+lower<-B - ME
+upper<-B + ME
+
+
+# bundle into data frame
+logisData<-data.frame(B, lower, upper, names(summary(full.model)$coefficient[,2]))
+names(logisData) <- c("Coefficient", "lower.ci", "upper.ci", "Variable")
+levels(logisData$Variable)[1] <- "Intercept"
+logisData$Variable <- relevel(logisData$Variable, ref="Intercept")
+
+pd <- position_dodge(0.6) # move them .05 to the left and right
+x1<-ggplot(data=logisData, aes(x=Variable,y=Coefficient)) +
+  geom_errorbar(data=logisData,aes(ymin=lower.ci, ymax=upper.ci), width=.4,position=pd,size=1) +
+  geom_point(size=3, col="blue") 
+
+p6<-x1+theme(axis.text.y = element_text(size=14, family="Times"),axis.text.x = element_text(size=14, family="Times"),text = element_text(size=16, family="Times"),axis.title.x=element_text(size=16, family="Times"),axis.title.y=element_text(size=16, family="Times",vjust=1))
+p7<-p6+theme(axis.line.x = element_line(color="black", size = 0.25),
+             axis.line.y = element_line(color="black", size = 0.25),legend.title=element_blank(),legend.text=element_text(size=16, family="Times"))+ylab("Estimate") + xlab("Coefficient") #+ theme(axis.text.x = element_text(angle = 90))
+
+p7
+
+tiff("coefPlot.tiff", res=600, compression = "lzw", height=5, width=7, units="in")
+p7
+dev.off()
+```
+
+
+##  8.1  GGally package -  
+Alternatively, check out the cool GGally package!!
+```{r}
+require(GGally)
+ggcoef(full.model)
+## super cool!
+```
+
+
+
+# Lab 5 Assignment 
+DUE IN Lab Tuesday February 19
+
+Answer the following questions in your lab report, feeling free to use TABLES and FIGURES properly labeled and in JWM format. For the introduction, just focus on our  overarching research question of testing whether wolves select habitats at the 3rd order scale, as we would expect based on diet preference of wolves at the 4th order scale (see lab 4). But today, we will compare our two main sets of models, biotic versus environmental covariates. 
+
+First, focusing just on the wolfkde.csv dataset:
+
+1)	For today’s assignment, your goal is to detail the steps you chose to select the ‘top’ model(s) explaining wolf probability of use from a single or set of top model(s) for all wolves combined.   
+a.	First, describe your approach for screening against collinearity in your predictor set?
+b.	After screening for collinearity, how did you address the problem of model selection? You can use ANY of the approaches we used in this lab (stepAIC, dredging, development of an a-priori model set(s), etc. Either way, describe your approach to developing your candidate model set.
+c.	Given the top model set, what is the best model(s) explaining wolf resource selection? Describe and interpret the effects of the individual coefficients on wolf resource selection from this top model set.
+
+2)	Finally, redo the analysis (ideally using a script file created from your command log file – this should not be onerous) for each of the two different wolf packs? Are their differences between the packs in terms of collinearity? In the top models selected between packs? In model selection uncertainty? 
+
+For suggestions on how to present results of model selection, see Anderson & Burnham (2001) cited in Lab5. 
+
+
+# Literature Cited and Other Useful Citations
+
+1. Anderson, D. R., Burnham, K. P., Gould, W. R. & Cherry, S. (2001) Concerns About Finding Effects That Are Actually Spurious. Wildlife Society Bulletin, 29, 311-316.
+2. Anderson, D.R. and K. Burnham. 2002.  Avoiding pitfalls when using information-theoretic approaches.  Journal of Wildlife Management  66: 912-916. 
+3. Anderson, D.R., K.P. Burnham, and W.L. Thompson. 2000.  Null hypothesis testing: problems, prevalance, and an alternative.  Journal of Wildlife Management  64: 912-923 .
+4. Anderson, D.R., W.A. Link, D.H. Johnson, and K.P. Burnham. 2001.  Suggestions for presenting the results of data analyses.  Journal of Wildlife Management  65: 373-378.
+5. Burnham, K. P. & Anderson, D. R. (2001) Kullback-Leibler Information as a Basis for Strong Inference in Ecological Studies. Wildlife Research, 28, 111-119.
+6. Burnham, K.P. and D.R. Anderson. 1998. Model selection and inference: a practical information-theoretic approach.  Springer-Verlag, New York.
+7. Guisan, A., T.C. Edwards, and T. Hastie. 2002.  Generalized Linear and Generalized Additive Models in Studies of Species Distributions: Setting the Scene.  Ecological Modelling  157 :89-100.
+8. Hooten, M. B., and N. T. Hobbs. 2015. A guide to Bayesian model selection for ecologists. Ecological Monographs 85:3–28.
+9. Hosmer, D.W. and S. Lemeshow. 2000. Applied Logistic Regression.  John Wiley and Sons, New York.
+10. McCullough, P. and J.A. Nelder. 1989. Generalized linear models. Second edition.  Chapman and Hall, London, UK.
+11. Menard, S. 2002. Applied logistic regression. Second Edition.  Sage Publications, London.
+12. Prarie, Y.T. and D.F. Bird. 1989.  Some misconceptions about the spurious correlation problem in the ecological literature.  Oecologia  81: 285-298.
+13. Reineking, B. and B. Schroder. 2006.  Constrain to Perform: Regularization of Habitat Models.  Ecological Modelling  193:675-690.
+14. Tenan, S., R. B. O'Hara, I. Hendriks, and G. Tavecchia. 2014. Bayesian model selection: The steepest mountain to climb. Ecological Modelling 283:62-69.
