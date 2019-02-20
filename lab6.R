@@ -339,47 +339,77 @@ confusionMatrix(xtab1)
 
 ## Excercise - redo for top enviornmental model
 
-########################################################################################################
-##### 3.0 ROC curves
+########################################################################################## 3.0 ROC curves
 
 # https://www.r-bloggers.com/illustrated-guide-to-roc-and-auc/
   
 # ROCR package help here: https://rocr.bioinf.mpi-sb.mpg.de 
 
+## Sensitivity and Specificity
+
+#Remember that sensitivity is the True Positive Rate, or, the classification success of 1's when they are truly 1. And that Specificity is the Ture Negative rate. 1 - TNR is known as the False Negative Rate, something we also need to think of. 
+
 require(ROCR)
-
-#### 3.1 Evaluating the top biotic model
-
 pp = predict(top.biotic,type="response")
-
 pred = prediction(pp, wolfkde3$used)
+
+perf3 <- performance(pred, "sens", x.measure = "cutoff")
+plot(perf3)
+
+#Look at what happens to our Sensitivity as we change the cutoff value. Remember that sensitivity is the True Positive Rate, or, the classification success of 1's when they are truly 1. Looking at the graph, we see that we classify everything as a wolf used location when the cutoff is really low. 
+
+#Next, lets examine the relationship between the cutoff value and Specificity, or, the True Negative Rate - the rate we correctly classify 0's.  
+perf4 <- performance(pred, "spec", x.measure = "cutoff")
+plot(perf4)
+#Similarly, if we use a really low threshold cutoff value between 0's and 1's, we see that we have the lowest Specificity - because basically we are calling everything a 1, and misclassifiying the true 0's. As the cutoff increases, we see that there is a sharp increase in our Specificity, approaching 100% of all 0's correctly classified by a cutoff of about 0.5. 
+
+#Obviously, in most cases we want to maximize both Sensitivity and Specificity for a model with what could be called the 'optimal' cutpoint. 
+
+## Estimating the Optimal Cutpoint
+#Next, we will calculate the Maximum for the sum of sensitivity and specificity to calculate the optimal cutpoint probability. 
+
 perfClass <- performance(pred, "tpr","fpr") # change 2nd and/or 3rd arguments for other metrics
-plot(perfClass)
-
-#Calculate the Area Under Curve
-BMauc <- performance(pred, measure="auc") 
-str(BMauc)
-auc <- as.numeric(BMauc@y.values)
-auc
-
-
-#Max the sum of sensitivity and specificity 
 fpr <- perfClass@x.values[[1]]
 tpr <- perfClass@y.values[[1]]
 sum <- tpr + (1-fpr)
 index <- which.max(sum)
 cutoff <- perfClass@alpha.values[[1]][[index]]
 cutoff
-## thus the cutpoint that maximizes the overall classification succes is 0.236
+#Thus the cutpoint that maximizes the overall classification succes is 0.236. Note that this is VERY different from our naive starting value of 0.5. 
 
-#Plot ROC Curve with cut point and AUC
+#Now, lets overlay the sensitivity, specificity, and optimal cutoff curves together. 
+plot(perf3, col="blue") # Sensitivity
+plot(perf4, add = TRUE) # Specificity
+abline(v=cutoff, col="red") ## optimal cutpoint
+
+## ROC Plot 
+#Now we will put the TPR and FPR (1 - Specificity) together to estimate the Receiver Operating Characteristic Curve (ROC plot). Receiver Operating Characteristic(ROC) summarizes the model’s performance by evaluating the trade offs between true positive rate (sensitivity) and false positive rate(1- specificity). For plotting ROC, it is advisable to assume p > 0.5 since we are more concerned about success rate. ROC summarizes the predictive power for all possible values of p > 0.5.  The area under curve (AUC), referred to as index of accuracy(A) or concordance index, is a perfect performance metric for ROC curve. Higher the area under curve, better the prediction power of the model. Below is a sample ROC curve. The ROC of a perfect predictive model has TP equals 1 and FP equals 0. This curve will touch the top left corner of the graph.
+
+plot(perfClass)
+abline(a=0, b= 1)
+
+#This plot shows the trade off between the True Positive Rate versus the False Positive Rate for our top model. 
+
+#Next, we will proceed to calculate the area under the curve, or, the AUC. 
+BMauc <- performance(pred, measure="auc") 
+str(BMauc)
+auc <- as.numeric(BMauc@y.values)
+auc
+
+#This is the sum of the area under the predicted performance curve we just plotted, showing that about ~ 86% of the time, we are correctly classifying the 1's.  But this does not capture the 0's.  For this, we need to look at the entire ROC plot. 
+
 plot(perfClass, colorize = T, lwd = 5, print.cutoffs.at=seq(0,1,by=0.1),
      text.adj=c(1.2,1.2),
      main = "ROC Curve")
 text(0.5, 0.5, "AUC = 0.867")
 abline(v=cutoff, col = "red", lwd = 3)
 
+#Another cost measure that is popular is overall accuracy. 
+acc.perf = performance(pred, measure = "acc")
+plot(acc.perf)
 
+
+## Manually Changing Cutoff Values
 ### now lets try a p = of our cutoff
 ppused = wolfkde3$fitted.top.biotic>cutoff
 table(ppused,wolfkde3$used)
@@ -388,7 +418,9 @@ table(ppused,wolfkde3$used)
 #### about 80% - Great! But - what happened to our sensitivity (i.e., the probability of classifying the 0's correctly?)
 1344 / (1344+378)
 #### so our probability of classifying 0's correctly is about 78%
+#We see that the trade off between TPR and FPR at the optimal cutpoint leads to a much higher rate of TPR, 1's, but, at the expense of a reduced rate of TNR, or, the true negative rates. 
 
+#Lets look at the confusion matrix now for the optimal cutpoint. 
 wolfkde3$pr.top.biotic.used2 <- ifelse(wolfkde3$fitted.top.biotic>cutoff, 1, 0)
 xtab2<-table(wolfkde3$pr.top.biotic.used2, wolfkde3$used)
 xtab2
@@ -396,18 +428,19 @@ xtab2
 #?confusionMatrix
 confusionMatrix(xtab2)
 
+#Now lets use this cutoff to classify used and avail locations into 1 and 0's, and make a plot of where this cutoff is using geom_vline() in ggplot
 ## this is our best model classifying used and avail locations into 1 and 0's. 
 ggplot(wolfkde3, aes(x=wolfkde3$fitted.top.biotic, fill=usedFactor)) + geom_histogram(binwidth=0.05, position="identity", alpha=0.7) + xlab("Predicted Probability of Wolf Use") + theme(axis.title.x=element_text(size=16)) + geom_vline(xintercept = cutoff, col="red")
-## this graph shows the optimal cutpoint based on our data
+#This graph shows the optimal cutpoint based on our data, and illustrates the problem of confusion and asymmetry between the 0's and 1's. 
 
+#Finally, this next step calculates the default expected prevalence of 1's and 0's in our sample; compare that to the optimal cutpoint. 
 table(wolfkde3$used)
 396/(1722+396)
-## note that its VERY similar to our sampling fraction - the fact that it is bigger than the basic sampling fraction is interesting, but its essentially determined by the U/(U+A)
 
 ##### 3.2 Evaluating the top Environmental Model - on your own. 
 
 
-########################################################################################################### 4.0 k-folkds cross validation
+###################### 4.0 k-folkds cross validation
 
 ##### We are going to load the custom function kxv.R from source
 ##### See the kxv.R details for information about this function. It was basically programmed for Boyce for the 2002 paper
@@ -489,14 +522,34 @@ names(all_rasters)
 rast.top.biotic <- exp(biotic.coefs[1] + biotic.coefs[2]*disthumanaccess2 + biotic.coefs[3]*deer_w + biotic.coefs[4]*goat_w) / (1 +exp(biotic.coefs[1] + biotic.coefs[2]*disthumanaccess2 + biotic.coefs[3]*deer_w + biotic.coefs[4]*goat_w ))
 ## need to use the names of the raster layers we brought in up above. Note that they are not the same names as stored in the Raster stack
 
+# lets bring in the wolfyht shapefile to overlap to also aid our model evaluation
+wolfyht<-shapefile("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab6/Materials/wolfyht.shp")
+
 # plot predicted raster
 plot(rast.top.biotic, col=colorRampPalette(c("yellow", "orange", "red"))(255))
 plot(rast.top.biotic, col=colorRampPalette(c("yellow", "orange", "red"))(255), ext=kernels)
 plot(kernelHR, add=TRUE)
+plot(wolfyht, col='blue', pch = 16, add=TRUE)
 
 #look at histogram of predicted values
-hist(rast.top.biotic@data@values) ## note this isnt working for some reasong
+#hist(rast.top.biotic@data@values)  # for some reasons I kept getting errors here.  Try it yourself. 
 
+
+bv.raster<-raster()
+extent(bv.raster) <- c(xmin=570000, xmax=600000, ymin=5665000, ymax=5685000) 
+plot(rast.top.biotic, col=colorRampPalette(c("yellow", "orange", "red"))(255), ext=bv.raster)
+plot(kernelHR, add=TRUE)
+plot(wolfyht, col='blue', pch = 16, add=TRUE)
+
+
+Lets zoom in to a specific area in the Red Deer Pack, and examine how the spatial predictions are performing. 
+
+##
+rd.raster<-raster()
+extent(rd.raster) <- c(xmin=540000, xmax=600000, ymin=5700000, ymax=5730000) 
+plot(rast.top.biotic, col=colorRampPalette(c("yellow", "orange", "red"))(255), ext=rd.raster)
+plot(kernelHR, add=TRUE)
+plot(wolfyht, col='blue', pch = 16, add=TRUE)
 
 
 #### To do 5.2  Making maps in 10 equal area quantiles based JUST on the deciles of the AVAILABILITY points
