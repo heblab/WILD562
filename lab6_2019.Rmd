@@ -38,7 +38,7 @@ packages <- c("sp", "raster", "plyr", "ks", "adehabitatHR", "maptools", "rgdal",
 ipak(packages)
 ```
 
-## 0.1 Preliminaries: setting working directory
+## 0.2 Preliminaries: setting working directory
 ```{r}
 
 ## define working directory on each computer
@@ -48,10 +48,9 @@ marksComputer <- "/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/
 setwd(marksComputer) 
 ```
 
-## 0.2 Saving and loading data and shapefile data of Kernel home range from Lab 
+## 0.3 Saving and loading data and shapefile data of Kernel home range from Lab 
 
 Note, that we CANNOT just use an .RData file because of the Raster files in this lab. See below where we export our raster stack and then re-import it. 
-
 ```{r}
 wolfkde2 <- read.csv("wolfkde.csv", header=TRUE, sep = ",", na.strings="NA", dec=".")
 wolfkde3 <-na.omit(wolfkde2)
@@ -70,7 +69,7 @@ kernels <- raster()
 extent(kernels) <- c(xmin=546836, xmax=612093, ymin=5662036, ymax=5748911) 
 ```
 
-## 0.3 Loading raster's needed for mapping RSF models later
+## 0.4 Loading raster's needed for mapping RSF models later
 ```{r}
 setwd("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/Lab1_rintro/Lab1_data/")
 #list.files()
@@ -83,7 +82,6 @@ wolf_w<-raster("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Sp
 elevation2<-raster("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/Lab1_rintro/Lab1_data/Elevation2.tif") #resampled
 disthumanaccess2<-raster("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/Lab1_rintro/Lab1_data/DistFromHumanAccess2.tif") #resampled in lab 4
 disthhu2<-raster("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/Lab1_rintro/Lab1_data/DistFromHighHumanAccess2.tif") #resampled in lab 4
-extent(disthhu2)
 landcover2 <- raster("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2017/Labs/wild562_gisdata/landcover2.tif") ## resampled to same extent as lab 4
 extent(landcover2)
 plot(landcover2)
@@ -109,7 +107,7 @@ projection(mask.raster)<- "+proj=utm +zone=11 +datum=NAD83 +units=m +no_defs +el
 mask.raster[]<-0
 ```
 
-## 0.3 Creating 'dummy' variable landcover rasters for use in mapping later 
+## 0.5 Creating 'dummy' variable landcover rasters for use in mapping later 
 
 Note that when we want to map the spatial predictions of an RSF with categorical landcover types included, we have to create a series of 'dummy' raster layers as well. 
 ```{r}
@@ -141,13 +139,15 @@ plot(kernelHR, add=TRUE)
 # note that open conifer as intercept
 ```
 
-## 0.4 Creating a raster stack 
+## 0.6 Creating a Raster Stack 
 A Raster stack could help with mapping later, but, its not really needed this lab. 
 ```{r}
 #stack raster layers (i.e., create raster stack for sampling; must have same extent and resolution)
 all_rasters<-stack(deer_w, moose_w, elk_w, sheep_w, goat_w, wolf_w,elevation2, disthumanaccess2, disthhu2, landcover2, alpine, burn, closedConif, modConif, herb, mixed, rockIce, water, decid)
 
 plot(all_rasters) ## note limit of plotting 9 layers
+
+## the next two sets of commands give a way to export the processed rasters, all of them, to a new folder in similar format. 
 
 #names = c("deer_w", "moose_w", "elk_w", "sheep_w", "goat_w", "wolf_w","elevation2", "disthumanaccess2", "disthhu2", "landcover2", "alpine", "burn", "closedConif", "modConif", "herb", "mixed", "rockIce", "water", "decid")
 
@@ -181,7 +181,7 @@ aictab(cand.set = models, modnames = modnames)
 
 Ok, so the 'top' models from Lab 5 were the biotic and environmental models but the environmental model is FAR better.  We will see how it fares below. 
 
-# Evaluating Predictions from Residual P
+## Evaluating Predictions from Residual Diagnostic Plots
 
 First, we will proceed using 'normal' regression diagostics of residual plots proceeding as if this model was a linear model. We will start first with the top.env model Review here in Lab http://www.statmethods.net/stats/rdiagnostics.html for Linear Regression (Normal regression).
 
@@ -218,8 +218,6 @@ wolfkde3$cooks.distance.top.env <- cooks.distance(top.env)
 wolfkde3$obsNumber <- 1:nrow(wolfkde3) ## just added a row number for plotting
 
 ## Making manual residual verus predicted plots
-plot(wolfkde3$fitted.top.env, wolfkde3$residuals.top.env)
-
 ggplot(wolfkde3, aes(fitted.top.env, residuals.top.env)) + geom_point() + geom_text(aes(label = obsNumber, colour = used))
 ## Manual residual plot
 
@@ -240,12 +238,7 @@ This does not seem to be a data entry error - a REAL data point. But - look at t
 Next we will explore evaluating model fit graphically. 
 ```{r}
 # first lets make a plot of Y against X predictions...
-plot(wolfkde3$Elevation2, wolfkde3$fitted.top.env)
-
-##### Another way of looking at it
-scatterplot(fitted.top.env~Elevation2, reg.line=lm, smooth=TRUE, spread=TRUE, boxplots='xy', 
-            span=0.5, xlab="elevation", ylab="residual", cex=1.5, cex.axis=1.4, cex.lab=1.4, 
-            data=wolfkde3)
+scatterplot(fitted.top.env~Elevation2, reg.line=lm, smooth=TRUE, spread=TRUE, boxplots='xy', span=0.5, xlab="elevation", ylab="residual", cex=1.5, cex.axis=1.4, cex.lab=1.4, data=wolfkde3)
 
 hist(wolfkde3$fitted.top.env, scale="frequency", breaks="Sturges", col="darkgray")
 ```
@@ -291,7 +284,7 @@ ggplot(wolfkde3, aes(wolfkde3$cooks.distance.top.biotic, wolfkde3$hatvalues.top.
 
 Similarly to the Environment Model, this helps identify some locations that have high leverage that are used (1 - blue) and available (0=black) points. Similar to last time, datapoint 16. But also datapoint 30. 
 
-```{r{}}
+```{r}
 ## e.g., datapoint 16
 wolfkde3[13,]
 ## is a red deer wolf used point at high elevtion in open conifer far from human access that is being classified as an AVAILABLE location. 
@@ -301,9 +294,7 @@ wolfkde3[30,]
 
 Next we will evaluate model fit graphically, first making a plot of Y against X predictions... for Elevation. 
 ```{r}
-scatterplot(fitted.top.biotic~Elevation2, reg.line=lm, smooth=TRUE, spread=TRUE, boxplots='xy', 
-            span=0.5, xlab="elevation", ylab="residual", cex=1.5, cex.axis=1.4, cex.lab=1.4, 
-            data=wolfkde3)
+scatterplot(fitted.top.biotic~Elevation2, reg.line=lm, smooth=TRUE, spread=TRUE, boxplots='xy', span=0.5, xlab="elevation", ylab="residual", cex=1.5, cex.axis=1.4, cex.lab=1.4, data=wolfkde3)
 
 ## next, the histogram of predicted probaiblities
 hist(wolfkde3$fitted.top.biotic, scale="frequency", breaks="Sturges", col="darkgray")
@@ -322,7 +313,7 @@ ggplot(wolfkde3, aes(x=fitted.top.biotic, y=..density.., fill=usedFactor)) + geo
 
 So, similar but slightly starker differences between the predictions evaluated at the wolf pack level for the Biotic model, but the same 3 observations as for the top Environmental Models. 
 
-## 1.3. Comparing the 'fit' of the biotic and environmental models
+## Comparing the 'Fit' of Predictions From The Biotic and Environmental Models
 ```{r}
 ggplot(wolfkde3, aes(x=fitted.top.biotic, y=fitted.top.env)) + geom_point() + stat_smooth(method="lm")
 
@@ -338,7 +329,7 @@ ggplot(wolfkde3, aes(x=fitted.top.biotic, y=fitted.top.env, fill = pack)) + geom
 This shows there is some evidence that the top environmental model is not succesfulyl predicting the 'best' wolf habitat especially in the bow valley wolf pack compared to the top biotic model
 
 
-#  2.0 Classification Tables from top models 
+# Classification Tables
 
 The excercises above where we plotted the predicted probabilities of use as a function of whether the data were an actual true wolf location, or, a random available location, illustrate the problem of classification. Next we will learn about the problem of classification for Binary logistic regression, and how to calculate classification table tests. 
 
@@ -347,21 +338,21 @@ The excercises above where we plotted the predicted probabilities of use as a fu
 
 The basic problem of classification in logistic regression is that we have a binary response variable, 1 = Used, 0 = Avail (or unused), and yet a prediction that is a continuous predicted probability between 0 and 1.  This is VERY different from a normal linear regression model where the predicted values are in the same range and units of values as the observed data. Consider the regression of height and weight against each other where were are trying to predict weight based just on height. We can use standard model goodness of fit measures such as the Coefficient of Determination, R^2, for example, that measure the amount of variation in Y explained by X.  Here, with a binary input variable and a continuous probability prediction, we MUST first classify our predictions into whether they were a 0 or 1 first.  
 
-## 2.1 Pseuod R-squared 
+## Pseuod R-squared 
 
 Cox and Snell's R^2 is based on the log likelihood for the model compared to the log likelihood for a baseline model. However, with categorical outcomes, it has a theoretical maximum value of less than 1, even for a "perfect" model.
 
 Nagelkerke's R 2 is an adjusted version of the Cox and Snell's R 2 that adjusts the scale of the statistic to cover the full range from 0 to 1.
 
 McFadden's R 2 is another version, based on the log-likelihood kernels for the intercept-only model and the full estimated model.
-
-None are very satisfying, nor, tell us much useful about the model. Moreover, as Fielding and Bell note, they do not necessarily apply to Used-Available designs. 
 ```{r}
 require(DescTools)
 PseudoR2(top.biotic, c("McFadden", "CoxSnell", "Nagel"))
 ```
+None are very satisfying, nor, tell us much useful about the model. Moreover, as Fielding and Bell note, they do not necessarily apply to Used-Available designs.
 
-## 2.2 Classification table for top biotic  model
+
+## Classification Table for Top Biotic Model
 
 First we will arbitrarily define the cutpoint between 1 and 0's using p = 0.5, which might make sense in the case of a fair coin flip. We will see that the 'optimal' cutpoint varies for each individual dataset. And second, that what we are 'optimizing' may itself be affected by the research questions. 
 ```{r}
@@ -394,7 +385,7 @@ table(ppused,wolfkde3$used)
 ```
 So our probability of classifying 0's correctly decreases to ~ 80% with our sensitivity
 
-### now lets try a p = 0.10
+Now lets try a p = 0.10
 ```{r}
 ppused = wolfkde3$fitted.top.biotic>0.10
 table(ppused,wolfkde3$used)
@@ -403,7 +394,19 @@ table(ppused,wolfkde3$used)
 #### about 90% - Great! But - what happened to our sensitivity (i.e., the probability of classifying the 0's correctly?)
 1001 / (1001+721)
 ```
+
+Finally, lets try a p = 0.70
+```{r}
+ppused = wolfkde3$fitted.top.biotic>0.70
+table(ppused,wolfkde3$used)
+#### Now, what is specificity? (i.e., the probability of classifying the 1's correctly?)
+66/(330+66)
+#### about 17% - Terrible!
+#But - what happened to our sensitivity (i.e., the probability of classifying the 0's correctly?)
+17 / (1705+17)
+```
 So our probability of classifying 0's correctly decreases with our sensitivity, but we observe for the first time that there is a trade off between Sensitivity (true 1's) and specificity (true 0's) as we change the cutpoint probability. 
+
 
 ## Confusion Matrices
 
@@ -418,26 +421,37 @@ xtab1
 #?confusionMatrix
 confusionMatrix(xtab1)
 ```
-This reveals a LOT of information - lets compare these values to the table in the ? confusionMatrix help file, and here int his table. 
+This reveals a LOT of information - lets compare these values to the table in the ? confusionMatrix help file, and here in this table. 
 
-![Figure 6.1. Calculations of different quantities from a Confusion Matrix ](/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab6/ConfusionMatrix.png)
+
+A confusion matrix is an N X N matrix, where N is the number of classes being predicted. For the problem in hand, we have N=2, and hence we get a 2 X 2 matrix. Here are a few definitions, you need to remember for a confusion matrix :
+
+_Accuracy_ : the proportion of the total number of predictions that were correct.
+_Positive Predictive Value or Precision_ : the proportion of positive cases that were correctly identified.
+_Negative Predictive Value_ : the proportion of negative cases that were correctly identified.
+_Sensitivity or Recall_ : the proportion of actual positive cases which are correctly identified.
+_Specificity_ : the proportion of actual negative cases which are correctly identified.
+
+![Figure 6.1. Calculations of different quantities from a Confusion Matrix. Note, Target represents the TRUTH, and Model represents the PREDICTIONS.  ](/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab6/ConfusionMatrix.png)
 
 _Excercise: Redo for the top.env model_ on your own.
 
 
-## 3.0 Receiver Operating Characterstic ROC curves
+## Receiver Operating Characterstic ROC curves
 
-The receiver operating characteristic curve, i.e., ROC curve, is a graphical plot that illustrates the diagnostic ability of a binary classifier system as its discrimination threshold is varied.
+The receiver operating characteristic curve, i.e., ROC curve, is a graphical plot that illustrates the diagnostic ability of a binary classifier system as its discrimination threshold, the cutoff, is varied.
 
-The ROC curve is created by plotting the true positive rate (TPR) against the false positive rate (FPR) at various threshold settings. The true-positive rate is also known as sensitivity, recall or probability of detection[4] in machine learning. The false-positive rate is also known as the fall-out or probability of false alarm[4] and can be calculated as (1 − specificity). It can also be thought of as a plot of the Power as a function of the Type I Error of the decision rule (when the performance is calculated from just a sample of the population, it can be thought of as estimators of these quantities). The ROC curve is thus the sensitivity as a function of fall-out. In general, if the probability distributions for both detection and false alarm are known, the ROC curve can be generated by plotting the cumulative distribution function (area under the probability distribution from − ∞
--\infty  to the discrimination threshold) of the detection probability in the y-axis versus the cumulative distribution function of the false-alarm probability on the x-axis.
+The ROC curve is created by plotting the true positive rate (TPR) against the false positive rate (FPR) at various threshold settings. The true-positive rate is also known as _sensitivity_, recall or probability of detection in machine learning. _Specificity_ is therefore the True Negative Rate (TNR), that is, the classification success of true 0's. 
+
+Conversely, the false-positive rate is also known as the fall-out or probability of false alarm and can be calculated as (1 − _specificity_). It can also be thought of as a plot of the Power as a function of the Type I Error of the decision rule (when the performance is calculated from just a sample of the population, it can be thought of as estimators of these quantities). 
+
+The ROC curve is thus the sensitivity as a function of fall-out. In general, if the probability distributions for both detection and false alarm are known, the ROC curve can be generated by plotting the cumulative distribution function (area under the probability distribution from − ∞ -\infty  to the discrimination threshold) of the detection probability in the y-axis versus the cumulative distribution function of the false-alarm probability on the x-axis.
 
 ROC analysis provides tools to select possibly optimal models and to discard suboptimal ones independently from (and prior to specifying) the cost context or the class distribution. ROC analysis is related in a direct and natural way to cost/benefit analysis of diagnostic decision making.
 
 [Wikipedia Source](https://en.wikipedia.org/wiki/Receiver_operating_characteristic)
 
 _Other References_
-
 [An Illustrated Guide to ROC and AUC for Logisitic Regression Models](https://www.r-bloggers.com/illustrated-guide-to-roc-and-auc/)
 
 Today, we will use the ROCR package in R [ROCR package](ROCR package help here: https://rocr.bioinf.mpi-sb.mpg.de)
@@ -446,31 +460,32 @@ As well as this journal paper here:
 
 Sing, T., O. Sander, N. Beerenwinkel, and T. Lengauer. 2005. ROCR: visualizing classifier performance in R. Bioinformatics 21:7881.
 
-## 3.1 Evaluating the top biotic model
+## Sensitivity and Specificity
 
+Remember that sensitivity is the True Positive Rate, or, the classification success of 1's when they are truly 1. And that Specificity is the Ture Negative rate. 1 - TNR is known as the False Negative Rate, something we also need to think of. 
 ```{r}
 require(ROCR)
 pp = predict(top.biotic,type="response")
-
 pred = prediction(pp, wolfkde3$used)
-perfClass <- performance(pred, "tpr","fpr") # change 2nd and/or 3rd arguments for other metrics
-plot(perfClass)
+
+perf3 <- performance(pred, "sens", x.measure = "cutoff")
+plot(perf3)
 ```
+Look at what happens to our Sensitivity as we change the cutoff value. Remember that sensitivity is the True Positive Rate, or, the classification success of 1's when they are truly 1. Looking at the graph, we see that we classify everything as a wolf used location when the cutoff is really low. 
 
-This plot shows the trade off between the True Positive Rate versus the False Positive Rate for our top model. Again, take a minute to reflect what this means, and then we will proceed to calculate the area under the curve, or, the AUC
-
-
-Calculate the Area Under Curve
+Next, lets examine the relationship between the cutoff value and Specificity, or, the True Negative Rate - the rate we correctly classify 0's.  
 ```{r}
-BMauc <- performance(pred, measure="auc") 
-str(BMauc)
-auc <- as.numeric(BMauc@y.values)
-auc
+perf4 <- performance(pred, "spec", x.measure = "cutoff")
+plot(perf4)
 ```
-This is the sum of the area under the predicted performance curve we just plotted, showing that about ~ 86% of the time, we are correctly classifying the 1's.  But this does not capture the 0's.  For this, we need to look at the entire ROC plot. 
+Similarly, if we use a really low threshold cutoff value between 0's and 1's, we see that we have the lowest Specificity - because basically we are calling everything a 1, and misclassifiying the true 0's. As the cutoff increases, we see that there is a sharp increase in our Specificity, approaching 100% of all 0's correctly classified by a cutoff of about 0.5. 
 
+Obviously, in most cases we want to maximize both Sensitivity and Specificity for a model with what could be called the 'optimal' cutpoint. 
+
+## Estimating the Optimal Cutpoint
 Next, we will calculate the Maximum for the sum of sensitivity and specificity to calculate the optimal cutpoint probability. 
 ```{r}
+perfClass <- performance(pred, "tpr","fpr") # change 2nd and/or 3rd arguments for other metrics
 fpr <- perfClass@x.values[[1]]
 tpr <- perfClass@y.values[[1]]
 sum <- tpr + (1-fpr)
@@ -480,7 +495,39 @@ cutoff
 ```
 Thus the cutpoint that maximizes the overall classification succes is 0.236. Note that this is VERY different from our naive starting value of 0.5. 
 
-Next, we will Plot ROC Curve with cut point and AUC
+Now, lets overlay the sensitivity, specificity, and optimal cutoff curves together. 
+```{r} 
+plot(perf3, col="blue") # Sensitivity
+plot(perf4, add = TRUE) # Specificity
+abline(v=cutoff, col="red") ## optimal cutpoint
+```
+
+## ROC Plot 
+Now we will put the TPR and FPR (1 - Specificity) together to estimate the Receiver Operating Characteristic Curve (ROC plot). Receiver Operating Characteristic(ROC) summarizes the model’s performance by evaluating the trade offs between true positive rate (sensitivity) and false positive rate(1- specificity). For plotting ROC, it is advisable to assume p > 0.5 since we are more concerned about success rate. ROC summarizes the predictive power for all possible values of p > 0.5.  The area under curve (AUC), referred to as index of accuracy(A) or concordance index, is a perfect performance metric for ROC curve. Higher the area under curve, better the prediction power of the model. Below is a sample ROC curve. The ROC of a perfect predictive model has TP equals 1 and FP equals 0. This curve will touch the top left corner of the graph.
+
+```{r}
+plot(perfClass)
+abline(a=0, b= 1)
+```
+
+This plot shows the trade off between the True Positive Rate versus the False Positive Rate for our top model. At every cutoff, the TPR and FPR are calculated and plotted. The smoother the graph, the more cutoffs the predictions have. We also plotted a 45-degree line, which represents, on average, the performance of a Uniform(0, 1) random variable. The further away from the diagonal line, the better. Overall, we see that we see gains in sensitivity (true positive rate, (> 80%)), trading off a false positive rate (1- specificity), up until about 15% FPR. After an FPR of 15%, we don't see significant gains in TPR for a tradeoff of increased FPR.
+
+Next, we will proceed to calculate the area under the curve, or, the AUC. Calculating the Area Under Curve gives us a measure of how well the data are being predicted, overall, by the model. Note that the area of entire square is 1*1 = 1. Hence AUC itself is the ratio under the curve and the total area. For the case in hand, we get AUC ROC as 96.4%. Following are a few thumb rules:
+
++ 0.90-1 = excellent (A)
++ 0.80-.90 = good (B)
++ 0.70-.80 = fair (C)
++ 0.60-.70 = poor (D)
++ 0.50-.60 = fail (F)
+```{r}
+BMauc <- performance(pred, measure="auc") 
+str(BMauc)
+auc <- as.numeric(BMauc@y.values)
+auc
+```
+This is the sum of the area under the predicted performance curve we just plotted, showing that about ~ 86% of the time, we are correctly classifying the 1's.  But this does not capture the 0's.  For this, we need to look at the entire ROC plot. 
+
+Next, we will Plot ROC Curve with the optimal cut point and AUC
 ```{r}
 plot(perfClass, colorize = T, lwd = 5, print.cutoffs.at=seq(0,1,by=0.1),
      text.adj=c(1.2,1.2),
@@ -490,7 +537,14 @@ abline(v=cutoff, col = "red", lwd = 3)
 ```
 This plot shows us the ROC curve with the AUC reported, and the optimal cutpoint, 0.23, that best discriminates true 1's and true 0's from each other. 
 
+Another cost measure that is popular is overall accuracy. This measure optimizes the correct results, but may be skewed if there are many more negatives than positives, or vice versa. Let's get the overall accuracy for the simple predictions and plot it:
+```{r}
+acc.perf = performance(pred, measure = "acc")
+plot(acc.perf)
+```
+But again, we know that overall accuracy is masking changes in the different rates of classification mistakes from our earlier work looking at how classification success changes across a range of cutoff values. 
 
+## Manually Changing Cutoff Values
 Now lets go back and use this cutoff to calculate the Confusion Matrix ourself manually, p = 0.23 to see what is going on. 
 ```{r}
 ### now lets try a p = of our cutoff
@@ -529,12 +583,12 @@ table(wolfkde3$used)
 Note that its VERY similar to our sampling fraction - the fact that it is bigger than the basic sampling fraction is interesting, but its essentially determined by the U/(U+A)
 
 
-## 3.2 Evaluating the top Environmental Model - on your own. 
+## Evaluating the top Environmental Model 
 
 Note this is an excellent excercise to do on your own and part of this weeks homework .
 
 
-# 4.0 k-folkds Cross Validation
+# K-folds Cross Validation
 
 ROC and AUC are useful measures for evaluating the performance of a true logistic regression model, such as for used-unused designs in RSF models. However, as Fielding and Bell, and Boyce et al. tell us, when we use a USED-AVAILABLE model, ROC and AUC are no longer strictly speaking correct in evaluating predictive performance of a logistic regression model. As we will learn, this is because we are not actually fitting a logistic regression model. 
 
@@ -555,7 +609,7 @@ _References_
 
 3. Roberts, D. R., V. Bahn, S. Ciuti, M. S. Boyce, J. Elith, G. Guillera-Arroita, S. Hauenstein, J. J. Lahoz-Monfort, B. Schröder, W. Thuiller, D. I. Warton, B. A. Wintle, F. Hartig, and C. F. Dormann. 2017. Cross-validation strategies for data with temporal, spatial, hierarchical, or phylogenetic structure. Ecography 40:913-929.
 
-##### 4.1 evaluating the top Environmental Model
+## Evaluating the Top Environmental Model with k-folds
 ```{r}
 source("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab6/kxv.R", verbose = FALSE)
 ```
@@ -585,11 +639,11 @@ kfolds2
 ```
 So the answer is that the overall pooled model predicts the Bow Valley pack really well, but fails to predict the Red Deer pack any better, essentially, than random. This is obvious evidence that there is unmodeled heterogeneity between wolf packs in this dataset that is being ignored or masked when we fit a model that does not accomodate this. 
 
-## 4.2 evaluating the top Biotic Model - on your own
+## Evaluating the top Biotic Model - 
 
-Again, a great excercise. 
+On your own for homework - again, a great excercise. 
 
-## 4.3 Manual k-folds cross-validation
+## Manual k-folds Cross-Validation
 
 To really get an idea of what k-folds cross validation is doing, truly, we will evaluate the steps of at least 1 loop (k=1 of 5) MANUALLY so we can see exactly what k-folds is doing
 ```{r}
@@ -624,9 +678,11 @@ cor.test(c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10), c(0,2,0,8,6,15,24,50,99,110), method=
 
 ```
 
-# Mapping spatial predictions of 'top' model 
+# Mapping Spatial Predictions of 'Top' Model 
 
-##5.1 Easy Spatial Prediction just in ggplot
+Spatial prediction is usually the last and final step in model evaluation. During mapping, we learn a great deal about how well the model fits in geographic space, and, deal with issues of interpolation and extrapolation which we will discuss in class. 
+
+## Easy Spatial Prediction just in ggplot
 ```{r}
 par(mfrow = c(1,1)) # reset graphical parameters
 
@@ -635,8 +691,8 @@ ggplot(wolfkde3, aes(EASTING, NORTHING, col = fitted.top.env)) + geom_point(size
 ```
  What did we just do? What is this a map of?
 
-## 5.2 Raster predictions for top Biotic Model
-Note that the final step takes a long time. 
+## Raster Predictions 
+Next we will plot the spatial predictions using our raster stack for the top Biotic Model. Note that the final step takes a long time. 
 ```{r}
 par(mfrow = c(1,1))
 summary(top.biotic)
@@ -652,19 +708,42 @@ names(all_rasters)
 rast.top.biotic <- exp(biotic.coefs[1] + biotic.coefs[2]*disthumanaccess2 + biotic.coefs[3]*deer_w + biotic.coefs[4]*goat_w) / (1 +exp(biotic.coefs[1] + biotic.coefs[2]*disthumanaccess2 + biotic.coefs[3]*deer_w + biotic.coefs[4]*goat_w ))
 ## need to use the names of the raster layers we brought in up above. Note that they are not the same names as stored in the Raster stack
 
+# lets bring in the wolfyht shapefile to overlap to also aid our model evaluation
+wolfyht<-shapefile("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/lab6/Materials/wolfyht.shp")
+
 # plot predicted raster
 plot(rast.top.biotic, col=colorRampPalette(c("yellow", "orange", "red"))(255))
 plot(rast.top.biotic, col=colorRampPalette(c("yellow", "orange", "red"))(255), ext=kernels)
 plot(kernelHR, add=TRUE)
+plot(wolfyht, col='blue', pch = 16, add=TRUE)
 
 #look at histogram of predicted values
-hist(rast.top.biotic@data@values) 
+#hist(rast.top.biotic@data@values)  # for some reasons I kept getting errors here.  Try it yourself. 
+```
+Lets zoom in to a specific area in the Bow Valley, and examine how the spatial predictions are performing. 
+```{r}
+##
+bv.raster<-raster()
+extent(bv.raster) <- c(xmin=570000, xmax=600000, ymin=5665000, ymax=5685000) 
+plot(rast.top.biotic, col=colorRampPalette(c("yellow", "orange", "red"))(255), ext=bv.raster)
+plot(kernelHR, add=TRUE)
+plot(wolfyht, col='blue', pch = 16, add=TRUE)
+```
+
+Lets zoom in to a specific area in the Red Deer Pack, and examine how the spatial predictions are performing. 
+```{r}
+##
+rd.raster<-raster()
+extent(rd.raster) <- c(xmin=540000, xmax=600000, ymin=5700000, ymax=5730000) 
+plot(rast.top.biotic, col=colorRampPalette(c("yellow", "orange", "red"))(255), ext=rd.raster)
+plot(kernelHR, add=TRUE)
+plot(wolfyht, col='blue', pch = 16, add=TRUE)
 ```
 
 
-
 ## Mapping Just the Numerator of an RSF 
-Mapping JUST the numerator from the RSF from a Used-Available Design. For reason we will discuss in class, lets just map the numerator of the RSF for the biotic model just for comparative reasons for now. 
+Mapping JUST the numerator from the RSF from a Used-Available Design. For reason we will discuss in class, lets just map the numerator of the RSF for the biotic model just for comparative reasons for now.  This is essentially the exponential model described by Manly et al. and Keating and Cherry. 
+
 ```{r}
 rast.top.biotic.RSF <- exp(biotic.coefs[1] + biotic.coefs[2]*disthumanaccess2 + biotic.coefs[3]*deer_w + biotic.coefs[4]*goat_w) 
 plot(rast.top.biotic.RSF, col=colorRampPalette(c("yellow", "orange", "red"))(255), ext=kernels)
@@ -672,12 +751,12 @@ plot(kernelHR, add=TRUE)
 ```
 
 
-# LAB 6 Assignment
+# Lab 6 Assignment
 Due in Lab Tuesday Feb 26
 
 For this lab, just report the METHODS and RESULTS answering the following questions. 
 
-1.	Building on the top model you identified for both the environmental suite of models and the biotic-species suite of models, compare the results of goodness of fit testing for both models. Write up your results of whichever of the following tests you used for assessing model fit – R2, LR Chi-square test, Hosmer & Lemeshow test with 10 groups, residual diagnostics (outliers and influential points), classification tables, and ROC scores. Which is the ‘better’ model?
+1.	Building on the top model you identified for both the environmental suite of models and the biotic-species suite of models, compare the results of goodness of fit testing for both models. Write up your results of whichever of the following tests you used for assessing model fit – Pseudo-R2 values, classification tables, and ROC scores. Which is the ‘better’ model?
 
 2.	Compare the classification success of your 2 models with the default cutpoint probability (0.5) with that revealed by the sensitivity – specificity trade off? Discuss some reasons why the optimal cutpoint probability may be <0.5 in our case? How would your sampling design, species biology, etc., affect the cutpoint probability?
 
@@ -686,11 +765,13 @@ For this lab, just report the METHODS and RESULTS answering the following questi
 THIS IS AN ADVANCED QUESTION  - I ENCOURAGE YOU TO WORK IN GROUPS FOR THIS QUESTION AND TO CONSIDER USING SOMETHING SIMILAR IN YOUR OWN ANALYSES
 
 4.	We have made ‘population’ level predictions for ALL WOLVES IN BNP using the averaged top RSF model for the two suites of models. Re-evaluate what the top habitat-dependent model is for each wolf pack and then conduct cross-validation of the predictions of one pack against the other pack. 
+
 Here are some hints for steps;
-a.	Re-run the RSF’s for just the Bow Valley pack.
+a.	Re-run the biotic and environmental RSF’s for just the Bow Valley pack. Then repeat this step for the Red Deer pack.
 
-b.	With the results of the Bow Valley pack RSF ‘stored’ – i.e., in active memory [recall in R the last model run is what is ‘active’] use this model to predict the probability of use for the Red Deer pack, and vice versa. 
+b.	With the results of the Bow Valley pack RSF,  use this model to predict the probability of use for the Red Deer pack, and vice versa. 
 
-c.	Conduct model evaluation using the R-squared from a linear regression of the prediction for the Bow Valley pack using the Bow Valley model vs. the Red Deer Model, and vice versa.
+c.	Conduct model evaluation using the R-squared from a linear regression of the prediction for the Bow Valley pack using the Bow Valley model vs. the Red Deer Model, and vice versa. What does the slope parameter for this model represent?
 
-d.	Can you think of how to do k-folds cross validation between packs? i.e., compare the area adjusted frequency of counts in each of 10 ranked deciles to that predicted for the other pack??? What does the k-folds cross validation tell us about differences between predictions at the population level and predictions at the pack-level??? Follow the lab instructions for manually calculating k-folds above using the excel spreadsheets.
+d.	Can you think of how to do k-folds cross validation between packs? i.e., compare the area adjusted frequency of counts in each of 10 ranked deciles to that predicted for the other pack??? What does the k-folds cross validation tell us about differences between predictions at the population level and predictions at the pack-level??? Follow the lab instructions for manually calculating k-folds above using the excel spreadsheets AT the very least. OR - do in R using the 'manual' code we used at the end of lab. How do these cross-validation between packs compare to the 'naive' k-folds we conducted partitioning by wolf pack in lab (e.g., by setting partition = "pack").
+
