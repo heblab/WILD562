@@ -419,7 +419,9 @@ xtab1<-table(wolfkde3$pr.top.biotic.used, wolfkde3$used)
 xtab1
 
 #?confusionMatrix
-confusionMatrix(xtab1)
+confusionMatrix(xtab1) ## Note this is incorrectly specifying what the 1's are. 
+
+confusionMatrix(xtab1, positive = "1") ## Thanks to spring 2019 student Forest HAyes for finding this mistake :)
 ```
 This reveals a LOT of information - lets compare these values to the table in the ? confusionMatrix help file, and here in this table. 
 
