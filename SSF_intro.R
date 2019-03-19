@@ -13,8 +13,8 @@
 #'
 ## ----setup, include=FALSE------------------------------------------------
 knitr::opts_chunk$set(echo = TRUE, cache = TRUE)
-knitr::opts_knit$set(root.dir = "C:/Users/Eric/Desktop/SSF_intro/")
-
+knitr::opts_knit$set(root.dir = "/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/Lab8/2019/Elk/SSF_intro")
+setwd("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/Lab8/2019/Elk/SSF_intro/")
 #'
 #'
 #' # Loading necessary packages
@@ -28,6 +28,7 @@ require(amt)
 require(mapview)
 require(tidyverse)
 require(survival)
+#install.packages("sjPlot")
 require(sjPlot)
 
 #' # Loading and importing data
@@ -37,6 +38,15 @@ require(sjPlot)
 ## ------------------------------------------------------------------------
 load("./data/habitat_stack.rda")
 habitat_stack
+plot(habitat_stack)
+
+elev <- raster("./data/elev.tif")
+slope <- raster("./data/slope.tif")
+d_human <- raster("./data/d_human.tif")
+d_high_human <- raster("./data/d_high_human.tif")
+habitat_stack <- stack(elev, slope, d_human, d_high_human)
+plot(habitat_stack)
+
 
 #'
 #' And then our elk telemetry data:
@@ -277,6 +287,7 @@ elk_trk_id$trk[[1]]
 #' (5) Extracts the covariate values (for all layers in the raster stack) at the endpoint of each step. You could extract 
 #' values at the beginning point of each step too. It shouldn't make much difference (but you could try it and see!)
 ## ---- warning=F----------------------------------------------------------
+
 ssf_2_hr <- elk_trk_id %>%
   mutate(steps_2_hr = map(trk, function(x) {
     x %>%
@@ -326,7 +337,7 @@ ggplot(ssf_2_hr, aes(x = case_, y = slope, fill = case_)) +
 #' the "step_id_" field.
 #'
 ## ------------------------------------------------------------------------
-ssf_2_hr$stratum <- paste(ssf_2_hr$id, ssf_2_hr$step_id_)
+ssf_2_hr$stratum <- paste(ssf_2_hr$id, ssf_2_hr$burst_, ssf_2_hr$step_id_)
 
 #'
 #'
