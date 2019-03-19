@@ -1,4 +1,4 @@
-## Lab 8 SSF models
+## Lab 9 SSF models
 
 library(sp)
 library(raster)
@@ -10,6 +10,8 @@ library(maptools)
 library(leaflet)
 library(magrittr)
 install.packages("amt")
+## note have to do this in the Lab
+options(buildtools.check = function(action) TRUE)
 library(devtools)
 devtools::install_github("jmsigner/amt")
 library(amt)
@@ -441,7 +443,9 @@ m1 <- dat_all %>%
        amt::steps_by_burst() %>% amt::random_steps() %>%
        amt::extract_covariates(lu, where = "both") %>%
        mutate(landuse_end = factor(landuse_end))
-     }))
+     })) %>%
+  select(id, steps) %>%
+  unnest()
 
 m1 <- m1 %>% mutate(fit = map(steps, ~ amt::fit_issf(., case_ ~ landuse_end +
                                                            strata(step_id_))))
@@ -471,34 +475,34 @@ ggsave("img/fig_all_animals.pdf", width = 24, height = 12, units = "cm")
 ############################################################
 
 # Mixed-effect cLogit Models
-## eric - here I am trying to extract a clogit type DF from the fisher data above.
+
 
 select(step_id_, steps) %>% unnest()
 
 
-#### Objective 5.0 Matched-case control over multiple individual - Mixed-effects Clogit
+# Matched-case control over multiple individual - Mixed-effects Clogit
 
-##### 1) Here are the first 2 papers that figured out how to add a random intercept for each individual animal (e.g.), however, it did so in MATLAB. So, its mostly inaccessible to biologists. 
-### Craiu, R. V., T. Duchesne, D. Fortin, and S. Baillargeon. 2011. Conditional Logistic Regression With Longitudinal Follow-up and Individual-Level Random Coefficients: A Stable and Efficient Two-Step Estimation Method. Journal of Computational and Graphical Statistics 20:767-784.
+# 1) Here are the first 2 papers that figured out how to add a random intercept for each individual animal (e.g.), however, it did so in MATLAB. So, its mostly inaccessible to biologists. 
+
+# Craiu, R. V., T. Duchesne, D. Fortin, and S. Baillargeon. 2011. Conditional Logistic Regression With Longitudinal Follow-up and Individual-Level Random Coefficients: A Stable and Efficient Two-Step Estimation Method. Journal of Computational and Graphical Statistics 20:767-784.
 ### Duchesne, T., D. Fortin, and N. Courbin. 2010. Mixed conditional logistic regression for habitat selection studies. Journal of Animal Ecology 79:548-555.
 
-### 2) However, there have been a few big breakthrough’s lately with the mclogit package http://cran.r-project.org/web/packages/mclogit/mclogit.pdf  or the coxme package here http://cran.r-project.org/web/packages/coxme/coxme.pdf I just played around with both of these packages and they are actually. 
+# 2) However, there have been a few big breakthrough’s lately with the mclogit package http://cran.r-project.org/web/packages/mclogit/mclogit.pdf  or the coxme package here http://cran.r-project.org/web/packages/coxme/coxme.pdf I just played around with both of these packages and they are actually. 
 
-```{r}
-#install.packages(c("coxme", "mclogit")) ## note these are already installed above. 
-#library(coxme)
-#library(mclogit)
-##### Bring in Bison dataset 
-```
+#```{r}
+install.packages(c("coxme", "mclogit")) ## note these are already installed above. 
+library(coxme)
+library(mclogit)
+# Bring in Bison dataset 
 
-##### This data set was collected in order to study habitat selection by groups of free-ranging bison. For each observed group, two individuals (dyad) equipped with GPS radio-collars were followed simultaneously. A cluster is defined here as a pair of bison. This data set contains 20 clusters. The number of strata per cluster varies between 13 and 345 for a total of 1410 strata. A stratum is composed of two visited GPS locations (one for each individual) gathered at the same time, together with 10 random locations (five drawn within 700 m of each of the two focal bison). Therefore, there are 12 observations per stratum, with 2 cases (Y=1) and 10 controls (Y=0). However, due to problems in the data collection, 17 of the 1410 strata have only 6 observations (1 case and 5 controls).
+# This data set was collected in order to study habitat selection by groups of free-ranging bison. For each observed group, two individuals (dyad) equipped with GPS radio-collars were followed simultaneously. A cluster is defined here as a pair of bison. This data set contains 20 clusters. The number of strata per cluster varies between 13 and 345 for a total of 1410 strata. A stratum is composed of two visited GPS locations (one for each individual) gathered at the same time, together with 10 random locations (five drawn within 700 m of each of the two focal bison). Therefore, there are 12 observations per stratum, with 2 cases (Y=1) and 10 controls (Y=0). However, due to problems in the data collection, 17 of the 1410 strata have only 6 observations (1 case and 5 controls).
 
-##### To make things simpler, consider that the two bison are a single calf:cow pair and so not independent, and thus similar to our elk data. 
+# To make things simpler, consider that the two bison are a single calf:cow pair and so not independent, and thus similar to our elk data. 
 
 install.packages("TwoStepCLogit") ## note these are already installed above. 
 library(TwoStepCLogit)
 library(mclogit)####  t
-```{r}
+
 head(bison)
 str(bison)
 head(table(bison$Strata,bison$Cluster))
@@ -516,19 +520,14 @@ bison.naive <- glm(Y ~ pmeadow + biomass, data = bison, family = binomial(logit)
 summary(bison.naive)
 
 
-##### So here, there really isnt that much different between the two mclogit models with or without a random effect for each bison ID (Cluster).  In both situations, the Beta coefficient for biomass and pmeadow were fairly similar, about -4.3 for pmeadow and 2.85 for biomass in both models. However, the coefficients differed quite a bit from the naive logistic regression model that showed much stronger avoidance of meadows and selection for high biomass, assuming that everything was available at the same time to each animal. 
+# So here, there really isnt that much different between the two mclogit models with or without a random effect for each bison ID (Cluster).  In both situations, the Beta coefficient for biomass and pmeadow were fairly similar, about -4.3 for pmeadow and 2.85 for biomass in both models. However, the coefficients differed quite a bit from the naive logistic regression model that showed much stronger avoidance of meadows and selection for high biomass, assuming that everything was available at the same time to each animal. 
 
-##### Now we can consider model selection between the two mclogit models, remember, that we can't compare mclogit to logit. 
+# Now we can consider model selection between the two mclogit models, remember, that we can't compare mclogit to logit. 
 
-```{r}
 AIC(bison.mcclogit, bison.mcfixed)
-
 AIC(bison.naive)
-#### Note that the AIC's are not comparable!!
-```
+# Note that the AIC's are not comparable!! And finally, we compare the different predictions between the mcclogit model and the logit model. 
 
-##### And finally, we compare the different predictions between the mcclogit model and the logit model. 
-```{r}
 bison$mcclogit <- predict(bison.mcclogit, response="expected")
 bison$mcfixed <- predict(bison.mcfixed, response="expected")
 bison$naive <- predict(bison.naive, type="response")
@@ -536,11 +535,10 @@ str(bison)
 plot(bison$mcclogit, bison$mcfixed)
 
 plot(bison$mcclogit, bison$naive)
-```
 
-##### And again, notice that we are really talking about different probabilities when we are comparing the clogit model to the naive logistic regression model predictions. In this dataset, the differences between the individual bison were not that impressive, so a random effect for individual bison was probably not that necessary. But there is still a big difference in interpretation between clogit and logit. 
+# And again, notice that we are really talking about different probabilities when we are comparing the clogit model to the naive logistic regression model predictions. In this dataset, the differences between the individual bison were not that impressive, so a random effect for individual bison was probably not that necessary. But there is still a big difference in interpretation between clogit and logit. 
 
-## Coxme - TO DO
+# Coxme - TO DO
 
 library(coxme)
 #make faketime variable to trick cox proportional hazards model that time is irrelevant in your conditional logistic model
@@ -559,5 +557,5 @@ plot(wolfGPS$X_COORD1, wolfGPS$Y_COORD1)
 ggplot(wolfGPS, aes(X_COORD1, Y_COORD1, colour = WOLFNAME)) +geom_point()
 ggplot(wolfGPS, aes(X_COORD1, Y_COORD1, colour = PACK)) +geom_point()
 
-Conduct an SSF model for JUST wovles in the Cascade, Red Deer and Bow Valley wolf packs for some covariates that we have used this semester.  Pick one season as well, and test whether there are differences in movement during day and night. 
+Conduct an SSF model for JUST wolves in the Cascade, Red Deer and Bow Valley wolf packs for some covariates that we have used this semester.  Pick one season as well, and test whether there are differences in movement during day and night. 
 
