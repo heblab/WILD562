@@ -9,9 +9,9 @@ library(mapview)
 library(maptools)
 library(leaflet)
 library(magrittr)
-install.packages("amt")
+#install.packages("amt")
 ## note have to do this in the Lab
-options(buildtools.check = function(action) TRUE)
+#options(buildtools.check = function(action) TRUE)
 library(devtools)
 devtools::install_github("jmsigner/amt")
 library(amt)
@@ -101,7 +101,7 @@ stps <- amt::track_resample(dat_1, rate = minutes(10), tolerance = minutes(1)) %
   filter_min_n_burst(min_n = 3) %>% steps_by_burst() %>%
   time_of_day(include.crepuscule = FALSE)
 
-str(stps, width = 80, strict.width = "no", nchar.max = 80, give.attr = FALSE)
+#str(stps, width = 80, strict.width = "no", nchar.max = 80, give.attr = FALSE)
 
 ### Obtaining the NLCD data from FedData
 install.packages("FedData")
@@ -136,11 +136,12 @@ get_nlcd(mask.raster, label="landuse", year = 2011, dataset = "landcover")
 land_use <- raster("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/Lab9/2019/EXTRACTIONS/landuse/NLCD/landuse_NLCD_2011_landcover.tif")
 
 extent(land_use)
-land_use
+#land_use
 ## the whole point here is to ensure you do NOT clip too closely to the extent of the spatial points dataframe - because of your availability sample. 
 
 plot(land_use)
 plot(fisherSP2, add=TRUE, type="p", color = "blue25", pch=12, cex = 0.5)
+
 ```
 str(land_use)
 land_use@data@attributes
@@ -207,10 +208,11 @@ p2 <- eda1 %>% select(landuse, tod = tod_end_, sl_, ta_) %>%
 p2
 
 
-library(cowplot)
+require(cowplot)
 pg1 <- plot_grid(
   p1 + theme(legend.position = "none"),
-  p2 + theme(legend.position = "none"), rel_widths = c(1, 1))
+  p2 + theme(legend.position = "none"), rel_widths = c(1, 1)
+  )
 leg <- get_legend(p1)
 plot_grid(pg1, leg, rel_widths = c(1, 0.1))
 
@@ -224,22 +226,21 @@ m1 <-stps %>% amt::random_steps(n = 9) %>%
   amt::time_of_day(include.crepuscule = FALSE) %>%
   mutate(log_sl_ = log(sl_)) -> d1
 
-
+## lets see what we just created
 head(m1, n=18)
-str(m1)
 ## How to visualize the SSF point generation process
-#m1$caseF <-as.factor(m1$case_)
-#ggplot(m1, aes(x1_ ,y1_, colour = caseF)) + geom_point(aes(colour = caseF))
-#xy2 <- m1[, c(4,5)]
-#fisherSSFPlot <- SpatialPointsDataFrame(coords = xy2, data = m1, proj4string = sp::CRS("+init=epsg:5070"))
-#mapview(fisherSSFPlot, zcol="caseF", legend = TRUE, cex=5, lwd=2, map.type = c("OpenStreetMap.DE", "Esri.WorldShadedRelief"))
+m1$caseF <-as.factor(m1$case_)
+ggplot(m1, aes(x1_ ,y1_, colour = caseF)) + geom_point(aes(size = caseF, colour = caseF))
+xy2 <- m1[, c(6,7)]
+fisherSSFPlot <- SpatialPointsDataFrame(coords = xy2, data = m1, proj4string = sp::CRS("+init=epsg:5070"))
+mapview(fisherSSFPlot, zcol="caseF", legend = TRUE, cex="caseF", lwd=2, map.type = c("OpenStreetMap.DE", "Esri.WorldShadedRelief"))
 
 
-m1 <- d1 %>% amt::fit_issf(case_ ~ wet + sl_ + wet:tod_end_+ sl_:tod_end_ + strata(step_id_))
-m1 <- d1 %>% amt::fit_issf(case_ ~ wet + log_sl_ + wet:tod_end_+ log_sl_:tod_end_ + strata(step_id_))
+m3 <- d1 %>% amt::fit_issf(case_ ~ wet + sl_ + wet:tod_end_+ sl_:tod_end_ + strata(step_id_))
+m2 <- d1 %>% amt::fit_issf(case_ ~ wet + log_sl_ + wet:tod_end_+ log_sl_:tod_end_ + strata(step_id_))
 m1 <- d1 %>% amt::fit_issf(case_ ~ wet + log_sl_ + sl_ + wet:tod_end_+ log_sl_:tod_end_ + sl_:tod_end_ + strata(step_id_))
 
-AIC(m1$model)
+AIC(m1$model, m2$model, m3$model)
 summary(m1)
 
 s <- summary(m1$model)$coefficients
@@ -259,12 +260,6 @@ scale_adj_day <- amt::adjust_scale(scale, coef(m1)["sl_"])
 scale_adj_night <- amt::adjust_scale(scale, coef(m1)["sl_"]) + coef(m1)["sl_:tod_end_night"]
 
 # speed
-speed_day <- shape * scale_adj_day
-speed_night <- shape * scale_adj_night
-
-speed_day <- shape_adj_day * scale
-speed_night <- shape_adj_night * scale
-
 speed_day <- shape_adj_day * scale_adj_day
 speed_night <- shape_adj_night * scale_adj_night
 
@@ -275,10 +270,12 @@ shape_adj_day
 shape_adj_night
 
 x <- seq(1, 500, 1)
-plot(x, dgamma(x, shape = shape_adj_night, scale = scale_adj_night), type = "l")
-lines(x, dgamma(x, shape = shape_adj_day, scale = scale_adj_day), type = "l")
+plot(x, dgamma(x, shape = shape_adj_night, scale = scale_adj_night), type = "l", col = "red")
+lines(x, dgamma(x, shape = shape_adj_day, scale = scale_adj_day), type = "l", col = "blue")
 
-# Bootstrap everything
+# Bootstrap everything to estimate movement rates adjusted for different day and night movement rates
+
+
 mod_data <- stps %>% amt::random_steps(n = 9) %>%
  amt::extract_covariates(wet, where = "end") %>%
  amt::time_of_day(include.crepuscule = FALSE) %>%
@@ -319,6 +316,8 @@ bt2 %>% group_by(key) %>% summarise(lq = quantile(val, 0.025),me = median(val), 
 # m/min
 bt2 %>% group_by(key) %>% summarise(lq = quantile(val, 0.025) / 10,me = median(val) / 10, mean = mean(val) / 10,uq = quantile(val, 0.975) / 10)
 
+
+#### Movement and habitat distributions
  ## Simulate ud
 wet_c <- crop(wet, amt::bbox(dat_1, spatial = TRUE, buff = 1e3))
 
@@ -435,21 +434,22 @@ dat_all %>% mutate(sr = lapply(trk, summarize_sampling_rate)) %>%
  # 8: crops
  lu <- reclassify(land_use, rcl, right = NA)
  names(lu) <- "landuse"
+plot(lu)
 
-m1 <- dat_all %>%
+ m1 <- dat_all %>%
    mutate(steps = map(trk, function(x) {
      x %>% amt::track_resample(rate = minutes(10), tolerance = seconds(120)) %>%
       amt::filter_min_n_burst() %>%
        amt::steps_by_burst() %>% amt::random_steps() %>%
        amt::extract_covariates(lu, where = "both") %>%
        mutate(landuse_end = factor(landuse_end))
-     })) %>%
-  select(id, steps) %>%
-  unnest()
-
-m1 <- m1 %>% mutate(fit = map(steps, ~ amt::fit_issf(., case_ ~ landuse_end +
+     })) 
+ 
+ m1 <- m1 %>% mutate(fit = map(steps, ~ amt::fit_issf(., case_ ~ landuse_end +
                                                            strata(step_id_))))
 
+ m1
+ 
 d2 <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
    select(id, sex, coef) %>% unnest %>%
   mutate(id = factor(id)) %>% group_by(term) %>%
@@ -476,86 +476,74 @@ ggsave("img/fig_all_animals.pdf", width = 24, height = 12, units = "cm")
 
 # Mixed-effect cLogit Models
 
+#Next we need to 'unpack' the nested data frame above into an expanded dataframe using the unnest command. 
 
-select(step_id_, steps) %>% unnest()
+fisher6 <- dat_all %>%
+  mutate(steps = map(trk, function(x) {
+    x %>% amt::track_resample(rate = minutes(10), tolerance = seconds(120)) %>%
+      amt::filter_min_n_burst() %>%
+      amt::steps_by_burst() %>% amt::random_steps() %>%
+      amt::extract_covariates(lu, where = "both") %>%
+      mutate(landuse_end = factor(landuse_end))
+  })) %>%
+  dplyr::select(id, steps) %>%
+  unnest()
 
+fisher6
+head(fisher6)
+head(fisher6$landuse_end)
+## lets create a String variable for landuse_end
+# 1: water, wetlands
+# 2: developed (open)
+# 3: developed (other)
+# 5: forest, herbaceouse
+# 8: crops
 
-# Matched-case control over multiple individual - Mixed-effects Clogit
+fisher6$landuseName = ifelse(fisher6$landuse_end == 1, "Wet Forests", 
+                             ifelse(fisher6$landuse_end == 2, "Developed Open", 
+                             ifelse(fisher6$landuse_end == 3, "Developed Other", 
+                             ifelse(fisher6$landuse_end == 5, "Natural", "Crops"))))
+table(fisher6$landuseName, fisher6$landuse_end)
 
-# 1) Here are the first 2 papers that figured out how to add a random intercept for each individual animal (e.g.), however, it did so in MATLAB. So, its mostly inaccessible to biologists. 
+## Fit a naive GLM
+model1 <- glm(case_~ I(landuseName), data=fisher6,family=binomial(link="logit"))
+# model1 <- glm(case_~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops"), data=fisher6,family=binomial(link="logit"))
+summary(model1)
 
-# Craiu, R. V., T. Duchesne, D. Fortin, and S. Baillargeon. 2011. Conditional Logistic Regression With Longitudinal Follow-up and Individual-Level Random Coefficients: A Stable and Efficient Two-Step Estimation Method. Journal of Computational and Graphical Statistics 20:767-784.
-### Duchesne, T., D. Fortin, and N. Courbin. 2010. Mixed conditional logistic regression for habitat selection studies. Journal of Animal Ecology 79:548-555.
+model2 <- glm(case_~ I(landuse_end), data=fisher6,family=binomial(link="logit"))
 
-# 2) However, there have been a few big breakthrough’s lately with the mclogit package http://cran.r-project.org/web/packages/mclogit/mclogit.pdf  or the coxme package here http://cran.r-project.org/web/packages/coxme/coxme.pdf I just played around with both of these packages and they are actually. 
-
-#```{r}
-install.packages(c("coxme", "mclogit")) ## note these are already installed above. 
-library(coxme)
-library(mclogit)
-# Bring in Bison dataset 
-
-# This data set was collected in order to study habitat selection by groups of free-ranging bison. For each observed group, two individuals (dyad) equipped with GPS radio-collars were followed simultaneously. A cluster is defined here as a pair of bison. This data set contains 20 clusters. The number of strata per cluster varies between 13 and 345 for a total of 1410 strata. A stratum is composed of two visited GPS locations (one for each individual) gathered at the same time, together with 10 random locations (five drawn within 700 m of each of the two focal bison). Therefore, there are 12 observations per stratum, with 2 cases (Y=1) and 10 controls (Y=0). However, due to problems in the data collection, 17 of the 1410 strata have only 6 observations (1 case and 5 controls).
-
-# To make things simpler, consider that the two bison are a single calf:cow pair and so not independent, and thus similar to our elk data. 
-
-install.packages("TwoStepCLogit") ## note these are already installed above. 
-library(TwoStepCLogit)
-library(mclogit)####  t
-
-head(bison)
-str(bison)
-head(table(bison$Strata,bison$Cluster))
-hist(bison$biomass)
-hist(bison$meadow)
-boxplot(bison$biomass~ bison$meadow)
-
-bison.mcclogit <- mclogit(cbind(Y, Strata) ~pmeadow + biomass, random=~1|Cluster, data=bison)
-summary(bison.mcclogit)
-
-bison.mcfixed <- mclogit(cbind(Y, Strata) ~pmeadow + biomass, data=bison)
-summary(bison.mcfixed)
-
-bison.naive <- glm(Y ~ pmeadow + biomass, data = bison, family = binomial(logit))
-summary(bison.naive)
+coef(model2)
+d2
 
 
-# So here, there really isnt that much different between the two mclogit models with or without a random effect for each bison ID (Cluster).  In both situations, the Beta coefficient for biomass and pmeadow were fairly similar, about -4.3 for pmeadow and 2.85 for biomass in both models. However, the coefficients differed quite a bit from the naive logistic regression model that showed much stronger avoidance of meadows and selection for high biomass, assuming that everything was available at the same time to each animal. 
+## Mixed-effect cLogit Models
 
-# Now we can consider model selection between the two mclogit models, remember, that we can't compare mclogit to logit. 
 
-AIC(bison.mcclogit, bison.mcfixed)
-AIC(bison.naive)
-# Note that the AIC's are not comparable!! And finally, we compare the different predictions between the mcclogit model and the logit model. 
+require(coxme)
 
-bison$mcclogit <- predict(bison.mcclogit, response="expected")
-bison$mcfixed <- predict(bison.mcfixed, response="expected")
-bison$naive <- predict(bison.naive, type="response")
-str(bison)
-plot(bison$mcclogit, bison$mcfixed)
 
-plot(bison$mcclogit, bison$naive)
+fisher6$time_ <- ifelse(fisher6$case_ == 0, 2, 1)   #2 for control, 1 for case
+table(fisher6$time_, fisher6$case_)
 
-# And again, notice that we are really talking about different probabilities when we are comparing the clogit model to the naive logistic regression model predictions. In this dataset, the differences between the individual bison were not that impressive, so a random effect for individual bison was probably not that necessary. But there is still a big difference in interpretation between clogit and logit. 
-
-# Coxme - TO DO
-
-library(coxme)
-#make faketime variable to trick cox proportional hazards model that time is irrelevant in your conditional logistic model
-ssf_data$faketime <- ifelse(ssf_data$used == 0, 2, 1)   #2 for control, 1 for case
-table(ssf_data$faketime, ssf_data$used)
-
-test2 <- coxme(Surv(faketime,used)~ timeNDVI + (1|elkid) + strata(stratum2), ties = "efron",data=ssf_data)
+clogitM1<- coxme(Surv(time_,case_) ~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops") + strata(step_id_) + (1|id) + strata(step_id_), ties = "efron",data=fisher6)
+summary(clogitM1)
 
 
 
-## Homework
+coefficients <- cbind(coef(model1), coef(clogit1), coef(clogitM1))
+d2
+
+
+
+# Homework
+
+#Conduct an SSF model for JUST wolves in the Cascade, Red Deer and Bow Valley wolf packs for some covariates that we have used this semester.  Pick one season as well, and test whether there are differences in movement during day and night. 
 
 wolfGPS <- read.csv("wolfGPS.csv")
 head(wolfGPS)
-plot(wolfGPS$X_COORD1, wolfGPS$Y_COORD1)
 ggplot(wolfGPS, aes(X_COORD1, Y_COORD1, colour = WOLFNAME)) +geom_point()
 ggplot(wolfGPS, aes(X_COORD1, Y_COORD1, colour = PACK)) +geom_point()
 
-Conduct an SSF model for JUST wolves in the Cascade, Red Deer and Bow Valley wolf packs for some covariates that we have used this semester.  Pick one season as well, and test whether there are differences in movement during day and night. 
+
+
 
