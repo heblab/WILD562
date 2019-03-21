@@ -86,7 +86,7 @@ mapview(fisherSP, zcol="individual.local.identifier", legend = TRUE, cex=5, lwd=
 ##### Bringing Fisher data from ID 1016, Fisher M1, into a MOVE object
 dat <- read_csv("Martes pennanti LaPoint New York.csv") %>%
    filter(!is.na(`location-lat`)) %>%
-   select(x = `location-long`, y = `location-lat`,
+   dplyr::select(x = `location-long`, y = `location-lat`,
            t = `timestamp`, id = `tag-local-identifier`) %>%
     filter(id %in% c(1465, 1466, 1072, 1078, 1016, 1469)) # for example 2
    dat_1 <- dat %>% filter(id == 1016)
@@ -185,7 +185,7 @@ eda1 <- stps %>% extract_covariates(wet, where = "start") %>% mutate(landuse = f
 
 
 ## plots
-p1 <- eda1 %>% select(landuse, tod = tod_end_, sl_, ta_) %>%
+p1 <- eda1 %>% dplyr::select(landuse, tod = tod_end_, sl_, ta_) %>%
   gather(key, val, -landuse, -tod) %>%
   filter(key == "sl_") %>%
   ggplot(., aes(val, group = tod, fill = tod)) + geom_density(alpha = 0.5) +
@@ -196,7 +196,7 @@ p1 <- eda1 %>% select(landuse, tod = tod_end_, sl_, ta_) %>%
 
 p1
 
-p2 <- eda1 %>% select(landuse, tod = tod_end_, sl_, ta_) %>%
+p2 <- eda1 %>% dplyr::select(landuse, tod = tod_end_, sl_, ta_) %>%
   gather(key, val, -landuse, -tod) %>%
   filter(key == "ta_") %>%
   ggplot(., aes(val, group = tod, fill = tod)) + geom_density(alpha = 0.5) +
@@ -411,7 +411,7 @@ library(parallel)
 
 dat <- read_csv("Martes pennanti LaPoint New York.csv") %>%
  filter(!is.na(`location-lat`)) %>%
-  select(x = `location-long`, y = `location-lat`,
+  dplyr::select(x = `location-long`, y = `location-lat`,
               t = `timestamp`, id = `tag-local-identifier`) %>%
    filter(id %in% c(1465, 1466, 1072, 1078, 1016, 1469))
 
@@ -423,7 +423,7 @@ dat_all$sex <- c("f", "f", "f", "m", "m", "m")
        amt::transform_coords(sp::CRS("+init=epsg:5070"))}))
 
 dat_all %>% mutate(sr = lapply(trk, summarize_sampling_rate)) %>%
-  select(id, sr) %>% unnest
+  dplyr::select(id, sr) %>% unnest
   land_use <- raster("/Users/mark.hebblewhite/Box Sync/Teaching/UofMcourses/WILD562/Spring2019/Labs/Lab9/2019/EXTRACTIONS/landuse/NLCD/landuse_NLCD_2011_landcover.tif")
   rcl <- cbind(c(11, 12, 21:24, 31, 41:43, 51:52, 71:74, 81:82, 90, 95),c(1, 1, 2, 3, 3, 3, 2, 5, 5, 5, 5, 5, 5, 5, 5, 5, 8, 8, 1, 1))
 # water, dev open, dev, barren, forest, shrub and herb, crops, wetlands
@@ -451,7 +451,7 @@ plot(lu)
  m1
  
 d2 <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
-   select(id, sex, coef) %>% unnest %>%
+   dplyr::select(id, sex, coef) %>% unnest %>%
   mutate(id = factor(id)) %>% group_by(term) %>%
   summarize(
      mean = mean(estimate),
@@ -462,7 +462,7 @@ d2$x <- 1:nrow(d2)
 
 
  p1 <- m1 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
-   select(id, sex, coef) %>% unnest %>%mutate(id = factor(id)) %>%
+   dplyr::select(id, sex, coef) %>% unnest %>%mutate(id = factor(id)) %>%
    ggplot(., aes(x = term, y = estimate, group = id, col = id, pch = sex)) +
    geom_rect(mapping = aes(xmin = x - .4, xmax = x + .4, ymin = ymin, ymax = ymax), data = d2, inherit.aes = FALSE,fill = "grey90") +geom_segment(mapping = aes(x = x - .4, xend = x + .4,y = mean, yend = mean), data = d2, inherit.aes = FALSE, size = 1) +
  geom_pointrange(aes(ymin = conf.low, ymax = conf.high),position = position_dodge(width = 0.7), size = 0.8) + geom_hline(yintercept = 0, lty = 2) +
@@ -476,8 +476,16 @@ ggsave("img/fig_all_animals.pdf", width = 24, height = 12, units = "cm")
 
 # Mixed-effect cLogit Models
 
-#Next we need to 'unpack' the nested data frame above into an expanded dataframe using the unnest command. 
+In the next set of exercises, I will build on the SSF case study of Singer et al., and conduct mixed-effects clogit analyses accounting for individual fishers as random effects similar to Lab 7.  Conceptually, adding random effects to conditional logistic regression models was challenging because there is no intercept.  Here are the first 2 papers that figured out how to add a random intercept for each individual animal (e.g.), however, it did so in MATLAB. So, its mostly inaccessible to biologists. 
 
+Craiu, R. V., T. Duchesne, D. Fortin, and S. Baillargeon. 2011. Conditional Logistic        Regression With Longitudinal Follow-up and Individual-Level Random Coefficients: A Stable   and Efficient Two-Step Estimation Method. Journal of Computational and Graphical            Statistics 20:767-784.
+
+Duchesne, T., D. Fortin, and N. Courbin. 2010. Mixed conditional logistic regression for    habitat dplyr::selection studies. Journal of Animal Ecology 79:548-555.
+
+Since these initial papers, however, there have been a few big breakthrough’s lately with the mclogit package http://cran.r-project.org/web/packages/mclogit/mclogit.pdf  or the coxme package here http://cran.r-project.org/web/packages/coxme/coxme.pdf I just played around with both of these packages and they are actually. 
+
+We will first need to 'unpack' the nested data frame from section 3 above into an expanded dataframe using the unnest command.  Then we will progress through a set of 3-4 different models and compare model interpretations to naive GLM models of the same kind. 
+```{r}
 fisher6 <- dat_all %>%
   mutate(steps = map(trk, function(x) {
     x %>% amt::track_resample(rate = minutes(10), tolerance = seconds(120)) %>%
@@ -491,59 +499,175 @@ fisher6 <- dat_all %>%
 
 fisher6
 head(fisher6)
-head(fisher6$landuse_end)
-## lets create a String variable for landuse_end
-# 1: water, wetlands
-# 2: developed (open)
-# 3: developed (other)
-# 5: forest, herbaceouse
-# 8: crops
+```
 
+
+Next, we will add a String variable for landuse_end recalling that, earlier, we defined the NLCD landcover according to:
+  1: water, wetlands
+2: developed (open)
+3: developed (other)
+5: forest, herbaceouse
+8: crops
+```{r}
+head(fisher6$landuse_end)
 fisher6$landuseName = ifelse(fisher6$landuse_end == 1, "Wet Forests", 
                              ifelse(fisher6$landuse_end == 2, "Developed Open", 
-                             ifelse(fisher6$landuse_end == 3, "Developed Other", 
-                             ifelse(fisher6$landuse_end == 5, "Natural", "Crops"))))
+                                    ifelse(fisher6$landuse_end == 3, "Developed Other", 
+                                           ifelse(fisher6$landuse_end == 5, "Natural", "Crops"))))
 table(fisher6$landuseName, fisher6$landuse_end)
+```
 
 ## Fit a naive GLM
-model1 <- glm(case_~ I(landuseName), data=fisher6,family=binomial(link="logit"))
-# model1 <- glm(case_~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops"), data=fisher6,family=binomial(link="logit"))
+First, we will fit a 'naive' GLM only focusing on the habitat processes, that is, habitat dplyr::selection for the landcover covaraites and compare them to the coefficients from the SSF fit to each individual Fisher and their two-stage population-level averages. 
+```{r}
+model1 <- glm(case_~ I(landuse_end), data=fisher6,family=binomial(link="logit"))
+## I commented out these next few versions of the models fit to landuseName to make comparisons to the previously fit 6 fisher two-step models more comparable, though we have to then keep track of which landovers 2, 3, 5, and 8 are. 
+#model1 <- glm(case_~ I(landuseName), data=fisher6,family=binomial(link="logit"))
+#model1 <- glm(case_~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops"), data=fisher6,family=binomial(link="logit"))
 summary(model1)
+```
+This model gives us an intercept, which is interpreted as wet-forests, and we note that we also did not get an intercept in the SSF model above.  Lets now compare the coefficients to above:
+  ```{r}
+coef(model1)
+naive_glm <- broom::tidy(model1) %>% 
+  filter(!term=="(Intercept)") 
 
-model2 <- glm(case_~ I(landuse_end), data=fisher6,family=binomial(link="logit"))
+figNaive <- naive_glm %>%
+  ggplot(., aes(x = term, y = estimate)) +
+  geom_pointrange(aes(ymin = estimate - 1.96*std.error, ymax = estimate +1.96*std.error)) +
+  labs(x = "Habitat", y = "Relative selection Strength") + 
+  theme_light() +
+  scale_x_discrete(labels = c("Dev(open)", "Dev(other)", "Natural", "Crops")) + geom_hline(yintercept = 0, lty = 2) + ylim(c(-3.75,1.5))
+figNaive
+```
+First, we recall we are comparing the two-stage averaged SSF coefficients from the fisher SSF model above extracted in the object d2. This is simply the arithmetic mean of the 6 individual coefficients.  Second, note that the ORDER of landcover categories on the X axis are changed now, which is slightly annoying, and tough to remedy. But keep that in mind when looking at the next figure. 
 
-coef(model2)
-d2
+```{r}
+fig5 <- plot_grid(p1, figNaive)
+fig5
+```
 
+We note that there are some similarities between coefficients, but, differences. 
+
+Developed Open is   -0.49 from the Naive Logit, and   -1.00 from the SSF
+Developed Other is  -1.82 from the Naive Logit, and   -2.20 from the SSF
+Natural is          +0.033 from the Naive Logit, and  +0.044 from the SSF
+CropsDeveloped Open -0.25 from the Naive Logit, and   -0.69 from the SSF
+
+The difference in the interpretation from the different parameters highlights the 'effect' of movement, so to speak, on dplyr::selection for covariates. Again, here, note we are not considering any differences between male or female, or night or day.  For example, one could conclude that the biggest difference is in the dplyr::selection of Developed Open, which we woudl underestimate the avoidance of if we failed to consider the movement processes. 
+
+## Fitting a 'Naive' cLogit Model 
+
+Next, we will fit a 'naive' clogit model, that is, a model that does not account for any differences between individuals and treats all step_id_'s as independent. Basically ignoring any random effects structure of individual fishers in this case. 
+_from https://rdrr.io/cran/survival/man/clogit.html_ 
+It turns out that the loglikelihood for a conditional logistic regression model = loglik from a Cox model with a particular data structure. Proving this is a nice homework exercise for a PhD statistics class; not too hard, but the fact that it is true is surprising.
+
+When a well tested Cox model routine is available many packages use this ‘trick’ rather than writing a new software routine from scratch, and this is what the clogit routine does. In detail, a stratified Cox model with each case/control group assigned to its own stratum, _time set to a constant_, status of 1=case 0=control, and using the exact partial likelihood has the same likelihood formula as a conditional logistic regression. The clogit routine creates the necessary dummy variable of times (all 1) and the strata, then calls coxph.
+
+The computation of the exact partial likelihood can be very slow, however. If a particular strata had say 10 events out of 20 subjects we have to add up a denominator that involves all possible ways of choosing 10 out of 20, which is 20!/(10! 10!) = 184756 terms. Gail et al describe a fast recursion method which partly ameliorates this; it was incorporated into version 2.36-11 of the survival package. The computation remains infeasible for very large groups of ties, say 100 ties out of 500 subjects, and may even lead to integer overflow for the subscripts – in this latter case the routine will refuse to undertake the task. The Efron approximation is normally a sufficiently accurate substitute.
+
+First we have to create a unique stratum ID for each set of steps for each individual animal. Right now, there is a case_ field, step_id_ field, and id_ field - but, the step_id_ field repeats for each animal ID. We do this by creating a new stratum field called stratum by pasting together fisher ID and step ID. 
+```{r}
+require(survival)
+head(fisher6)
+## Look at the number of step_id_'s for each id
+fisher6 %>% group_by(step_id_) %>% summarize(n=n())
+fisher6$stratum <- paste(fisher6$id, fisher6$step_id_)
+```
+So indeed, we see that there are 66 rows of data for each step ID because there are 6 individuals. 
+
+```{r}
+clogit1 <- clogit(case_ ~ I(landuse_end) + strata(stratum), data = fisher6)
+#clogit1 <- clogit(case_ ~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops") + strata(stratum), data = fisher6)
+summary(clogit1)
+coef(clogit1)
+# tidy up coefficients
+clogit_1 <- broom::tidy(clogit1) %>% 
+  filter(!term=="(Intercept)") 
+## make a figure
+figclogit1 <- clogit_1 %>%
+  ggplot(., aes(x = term, y = estimate)) +
+  geom_pointrange(aes(ymin = estimate+ 1.96*std.error, ymax = estimate-1.96*std.error)) +
+  labs(x = "Habitat", y = "Relative selection Strength") + 
+  theme_light() +
+  scale_x_discrete(labels = c("Dev(open)", "Dev(other)", "Natural", "Crops")) + geom_hline(yintercept = 0, lty = 2) + ylim(c(-3.75,1.5))
+figclogit1
+plot_grid(p1, figclogit1)
+```
+
+The coefficients are a bit different, but still, quite close even with the cluster for each individual Stratum. 
 
 ## Mixed-effect cLogit Models
 
+#We can currently fit mixed-effects clogit models using two R packages.
+#coxme and mclogit. 
 
+#First, we will use the coxme package to fit a mixed-effects conditional logistic regression model, accounting for the random effect of individual Fisher ID in this case. First, we ensure we have the coxme package loaded. See here for more information: https://cran.r-project.org/web/packages/coxme/vignettes/coxme.pdf 
+#```{r}
 require(coxme)
-
-
+#```
+#There is no 'convenient' wrapper around the coxme(Surv()) function like in clogit above.  Thus, first, we need to make a 'fake' time variable to trick the Cox-proportional hazards model that time is irrelevant in your conditional logistic model. We do this by adding a new variable, time_ to the fisher6 data frame above. This is actually what the clogit wrapper around survival is doing, we just don't know it. 
+#```{r}
 fisher6$time_ <- ifelse(fisher6$case_ == 0, 2, 1)   #2 for control, 1 for case
 table(fisher6$time_, fisher6$case_)
 
-clogitM1<- coxme(Surv(time_,case_) ~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops") + strata(step_id_) + (1|id) + strata(step_id_), ties = "efron",data=fisher6)
+clogitM1<- coxme(Surv(time_,case_) ~ I(landuse_end) + strata(stratum) + (1|id), data=fisher6)
+AIC(clogitM1)
 summary(clogitM1)
+#```
 
+#We note, importantly, that the random effects variance is quite low, nearly zero. This means there is very little variation between individual Fishers in selection.  This becomes important later. 
 
+#Second, I tried to fit a similar model using the mclogit package. However, the current implementation of random effects is limited to the PQL technique, which requires large cluster sizes. Thus, here, we do not have large enough clusters with only 9 random points. We see an error message accordingly. 
 
-coefficients <- cbind(coef(model1), coef(clogit1), coef(clogitM1))
-d2
+#```{r, eval = FALSE, echo =FALSE}
+#The first column contains the choice counts or choice indicators (alternative is chosen=1, is not chosen=0). The second column contains unique numbers for each choice set.
+# create a used / avail 1, 0 variable
+#fisher6$used_ <- ifelse(fisher6$case_ == 0, 0, 1) 
+#table(fisher6$time_, fisher6$used_)
 
+# convert stratum to a number
+#fisher6$stratumN <- as.factor(fisher6$stratum)
+#levels(fisher6$stratumN) <- 1:length(levels(fisher6$stratumF))
+#fisher6$stratumN <- as.numeric(fisher6$stratumN)
 
+# first fit a mclogit Test model wtih no random effect. 
+#mclogitTest <- mclogit(cbind(used_, stratumN) ~I(landuse_end), data=fisher6)
+
+#mclogitTest2 <- mclogit(cbind(used_, stratumN) ~I(landuse_end), random=~ 1|id, data=fisher6)
+#summary(mclogitTest2)
+#str(mclogitTest2)
+#```
+
+#Plotting the coefficients from coxme (or mclogit) are more difficult because there is no tidy approach for objects generated by coxme models, but we can quickly compare the coefficients directly here, where column 1, 2, and 3 are the naive GLM, naive clogit, and mixed-effect cLogit models. And compare them to the coefficients for the two-step models from Singer et al. 
+#```{r}
+v1<-model1$coefficients[2:5]
+v2<-coef(clogit1)
+v3<-coef(clogitM1)
+v5<-d2$mean
+coefSum <- as.data.frame(cbind(v1, v2, v3, v4))
+names(coefSum) <- c("Naive", "clogit", "coxme", "two-stage iSSF")
+coefSum
+#```
+#Recall that landuse_end 2, 3, 5 and 8 correspond to developed (open), developed (other), natural, and cropland. And that the forested wet areas are the 'reference' category. 
+
+#We note that there are some important differences here between the 'naive' , clogit/coxme/mcclogit, and  two-stage iSSF model. The reason why there are few differences between clogit, the coxme or mcclogit is because of the rather low variance in the summary of clogitM1 for individual Fisher's we saw above. 
+
+#However, there are - just like Lab 7 - differences between the two-staged model, d2, and the coxme/clogit models for landcover types 3 and 5, in particular.  
+
+## Model Selection
+#```{r}
+AIC(clogit1, clogitM1, mclogitTest)
+#```
+#This clearly confirms that really, the mixed-effect model structure is not necessary and we are fine making inferences using the 'naive' cLogit Model. Finally, we should compare manually the sum of the individual model AIC values from the two-stage modeling to really undestand if this clogit model is better than the two-step. However, these results may be idiosyncratically dependent on the small sample size of Fisher's here, 6, and the limited variation in response to just one categorical covariate.  Often, addition of mixed-effects models improves model fit substantially. 
 
 # Homework
 
 #Conduct an SSF model for JUST wolves in the Cascade, Red Deer and Bow Valley wolf packs for some covariates that we have used this semester.  Pick one season as well, and test whether there are differences in movement during day and night. 
 
+#```{r}
 wolfGPS <- read.csv("wolfGPS.csv")
 head(wolfGPS)
 ggplot(wolfGPS, aes(X_COORD1, Y_COORD1, colour = WOLFNAME)) +geom_point()
 ggplot(wolfGPS, aes(X_COORD1, Y_COORD1, colour = PACK)) +geom_point()
-
-
-
-
+#```

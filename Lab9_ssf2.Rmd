@@ -629,7 +629,7 @@ p1 <- m4 %>% mutate(coef = map(fit, ~ broom::tidy(.x$model))) %>%
    geom_rect(mapping = aes(xmin = x - .4, xmax = x + .4, ymin = ymin, ymax = ymax), data = d2, inherit.aes = FALSE,fill = "grey90") +geom_segment(mapping = aes(x = x - .4, xend = x + .4,y = mean, yend = mean), data = d2, inherit.aes = FALSE, size = 1) +
  geom_pointrange(aes(ymin = conf.low, ymax = conf.high),position = position_dodge(width = 0.7), size = 0.8) + geom_hline(yintercept = 0, lty = 2) +
    labs(x = "Habitat", y = "Relative selection Strength") + theme_light() +
-  scale_x_discrete(labels = c("Developed (open)", "Developed (other)", "Natural", "Crops"))
+  scale_x_discrete(labels = c("Dev(open)", "Dev(other)", "Natural", "Crops"))
 
 p1
 ```
@@ -685,8 +685,10 @@ table(fisher6$landuseName, fisher6$landuse_end)
 ## Fit a naive GLM
 First, we will fit a 'naive' GLM only focusing on the habitat processes, that is, habitat dplyr::selection for the landcover covaraites and compare them to the coefficients from the SSF fit to each individual Fisher and their two-stage population-level averages. 
 ```{r}
+model1 <- glm(case_~ I(landuse_end), data=fisher6,family=binomial(link="logit"))
+## I commented out these next few versions of the models fit to landuseName to make comparisons to the previously fit 6 fisher two-step models more comparable, though we have to then keep track of which landovers 2, 3, 5, and 8 are. 
 #model1 <- glm(case_~ I(landuseName), data=fisher6,family=binomial(link="logit"))
-model1 <- glm(case_~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops"), data=fisher6,family=binomial(link="logit"))
+#model1 <- glm(case_~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops"), data=fisher6,family=binomial(link="logit"))
 summary(model1)
 ```
 This model gives us an intercept, which is interpreted as wet-forests, and we note that we also did not get an intercept in the SSF model above.  Lets now compare the coefficients to above:
@@ -697,13 +699,13 @@ naive_glm <- broom::tidy(model1) %>%
 
 figNaive <- naive_glm %>%
   ggplot(., aes(x = term, y = estimate)) +
-  geom_pointrange(aes(ymin = estimate+ 1.96*std.error, ymax = estimate-1.96*std.error)) +
+  geom_pointrange(aes(ymin = estimate - 1.96*std.error, ymax = estimate +1.96*std.error)) +
   labs(x = "Habitat", y = "Relative selection Strength") + 
     theme_light() +
-  scale_x_discrete(labels = c("Developed (open)", "Developed (other)", "Natural", "Crops")) + geom_hline(yintercept = 0, lty = 2) + ylim(c(-3.75,1.5))
+  scale_x_discrete(labels = c("Dev(open)", "Dev(other)", "Natural", "Crops")) + geom_hline(yintercept = 0, lty = 2) + ylim(c(-3.75,1.5))
 figNaive
 ```
-First, we recall we are comparing the two-stage averaged SSF coefficients from the fisher SSF model above extracted in the object d2. This is simply the arithmetic mean of the 6 individual coefficients. 
+First, we recall we are comparing the two-stage averaged SSF coefficients from the fisher SSF model above extracted in the object d2. This is simply the arithmetic mean of the 6 individual coefficients.  Second, note that the ORDER of landcover categories on the X axis are changed now, which is slightly annoying, and tough to remedy. But keep that in mind when looking at the next figure. 
 
 ```{r}
 fig5 <- plot_grid(p1, figNaive)
@@ -729,10 +731,19 @@ When a well tested Cox model routine is available many packages use this ‘tric
 
 The computation of the exact partial likelihood can be very slow, however. If a particular strata had say 10 events out of 20 subjects we have to add up a denominator that involves all possible ways of choosing 10 out of 20, which is 20!/(10! 10!) = 184756 terms. Gail et al describe a fast recursion method which partly ameliorates this; it was incorporated into version 2.36-11 of the survival package. The computation remains infeasible for very large groups of ties, say 100 ties out of 500 subjects, and may even lead to integer overflow for the subscripts – in this latter case the routine will refuse to undertake the task. The Efron approximation is normally a sufficiently accurate substitute.
 
+First we have to create a unique stratum ID for each set of steps for each individual animal. Right now, there is a case_ field, step_id_ field, and id_ field - but, the step_id_ field repeats for each animal ID. We do this by creating a new stratum field called stratum by pasting together fisher ID and step ID. 
 ```{r}
 require(survival)
 head(fisher6)
-clogit1 <- clogit(case_ ~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops") + strata(step_id_), data = fisher6)
+## Look at the number of step_id_'s for each id
+fisher6 %>% group_by(step_id_) %>% summarize(n=n())
+fisher6$stratum <- paste(fisher6$id, fisher6$step_id_)
+```
+So indeed, we see that there are 66 rows of data for each step ID because there are 6 individuals. 
+
+```{r}
+clogit1 <- clogit(case_ ~ I(landuse_end) + strata(stratum), data = fisher6)
+#clogit1 <- clogit(case_ ~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops") + strata(stratum), data = fisher6)
 summary(clogit1)
 coef(clogit1)
 # tidy up coefficients
@@ -744,16 +755,21 @@ figclogit1 <- clogit_1 %>%
   geom_pointrange(aes(ymin = estimate+ 1.96*std.error, ymax = estimate-1.96*std.error)) +
   labs(x = "Habitat", y = "Relative selection Strength") + 
     theme_light() +
-  scale_x_discrete(labels = c("Developed (open)", "Developed (other)", "Natural", "Crops")) + geom_hline(yintercept = 0, lty = 2) + ylim(c(-3.75,1.5))
+  scale_x_discrete(labels = c("Dev(open)", "Dev(other)", "Natural", "Crops")) + geom_hline(yintercept = 0, lty = 2) + ylim(c(-3.75,1.5))
 figclogit1
 plot_grid(p1, figclogit1)
 ```
 
-The coefficients are not that different than
+The coefficients are a bit different, but still, quite close even with the cluster for each individual Stratum. 
 
 ## Mixed-effect cLogit Models
 
-Finally, we will use the coxme package to fit a mixed-effects conditional logistic regression model, accounting for the random effect of individual Fisher ID in this case. First, we ensure we have the coxme package loaded. See here for more information: https://cran.r-project.org/web/packages/coxme/vignettes/coxme.pdf 
+We can currently fit mixed-effects clogit models using two R packages.
+
+coxme and
+mclogit. 
+
+First, we will use the coxme package to fit a mixed-effects conditional logistic regression model, accounting for the random effect of individual Fisher ID in this case. First, we ensure we have the coxme package loaded. See here for more information: https://cran.r-project.org/web/packages/coxme/vignettes/coxme.pdf 
 ```{r}
 require(coxme)
 ```
@@ -762,22 +778,53 @@ There is no 'convenient' wrapper around the coxme(Surv()) function like in clogi
 fisher6$time_ <- ifelse(fisher6$case_ == 0, 2, 1)   #2 for control, 1 for case
 table(fisher6$time_, fisher6$case_)
 
-clogitM1<- coxme(Surv(time_,case_) ~ I(landuseName=="Developed Open") + I(landuseName=="Developed Other") +I(landuseName=="Natural")+I(landuseName=="Crops") + strata(step_id_) + (1|id) + strata(step_id_), ties = "efron",data=fisher6)
+clogitM1<- coxme(Surv(time_,case_) ~ I(landuse_end) + strata(stratum) + (1|id), data=fisher6)
+AIC(clogitM1)
 summary(clogitM1)
 ```
 
-Plotting the coefficients is more difficult because there is no tidy approach for objects generated by coxme models, but we can quickly compare the coefficients directly here, where column 1, 2, and 3 are the naive GLM, naive clogit, and mixed-effect cLogit models. And compare them to the coefficients for the two-step models from Singer et al. 
-```{r}
-coefficients <- cbind(coef(model1), coef(clogit1), coef(clogitM1))
-d2
+We note, importantly, that the random effects variance is quite low, nearly zero. This means there is very little variation between individual Fishers in selection.  This becomes important later. 
+
+Second, I tried to fit a similar model using the mclogit package. However, the current implementation of random effects is limited to the PQL technique, which requires large cluster sizes. Thus, here, we do not have large enough clusters with only 9 random points. We see an error message accordingly. 
+
+```{r, eval = FALSE, echo =FALSE}
+#The first column contains the choice counts or choice indicators (alternative is chosen=1, is not chosen=0). The second column contains unique numbers for each choice set.
+# create a used / avail 1, 0 variable
+fisher6$used_ <- ifelse(fisher6$case_ == 0, 0, 1) 
+table(fisher6$time_, fisher6$used_)
+
+# convert stratum to a number
+fisher6$stratumN <- as.factor(fisher6$stratum)
+levels(fisher6$stratumN) <- 1:length(levels(fisher6$stratumF))
+fisher6$stratumN <- as.numeric(fisher6$stratumN)
+
+# first fit a mclogit Test model wtih no random effect. 
+mclogitTest <- mclogit(cbind(used_, stratumN) ~I(landuse_end), data=fisher6)
+
+mclogitTest2 <- mclogit(cbind(used_, stratumN) ~I(landuse_end), random=~ 1|id, data=fisher6)
+summary(mclogitTest2)
+str(mclogitTest2)
 ```
-we note that there are few differences, here, between the 'naive' clogit and the mixed-effect clogit, and this corresponds to the rather low variance in the summary of clogitM1 for individual Fisher's we saw above. 
+
+Plotting the coefficients from coxme (or mclogit) are more difficult because there is no tidy approach for objects generated by coxme models, but we can quickly compare the coefficients directly here, where column 1, 2, and 3 are the naive GLM, naive clogit, and mixed-effect cLogit models. And compare them to the coefficients for the two-step models from Singer et al. 
+```{r}
+v1<-model1$coefficients[2:5]
+v2<-coef(clogit1)
+v3<-coef(clogitM1)
+v4<-d2$mean
+coefSum <- as.data.frame(cbind(v1, v2, v3, v4))
+names(coefSum) <- c("Naive", "clogit", "coxme", "two-stage iSSF")
+coefSum
+```
+Recall that landuse_end 2, 3, 5 and 8 correspond to developed (open), developed (other), natural, and cropland. And that the forested wet areas are the 'reference' category. 
+
+We note that there are some important differences here between the 'naive' , clogit/coxme/mcclogit, and  two-stage iSSF model. The reason why there are few differences between clogit, the coxme or mcclogit is because of the rather low variance in the summary of clogitM1 for individual Fisher's we saw above. 
 
 However, there are - just like Lab 7 - differences between the two-staged model, d2, and the coxme/clogit models for landcover types 3 and 5, in particular.  
 
 ## Model Selection
 ```{r}
-AIC(clogit1, clogitM1)
+AIC(model1, clogit1, clogitM1)
 ```
 This clearly confirms that really, the mixed-effect model structure is not necessary and we are fine making inferences using the 'naive' cLogit Model. Finally, we should compare manually the sum of the individual model AIC values from the two-stage modeling to really undestand if this clogit model is better than the two-step. However, these results may be idiosyncratically dependent on the small sample size of Fisher's here, 6, and the limited variation in response to just one categorical covariate.  Often, addition of mixed-effects models improves model fit substantially. 
 
